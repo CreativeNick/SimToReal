@@ -92,7 +92,7 @@ class Env(BaseEnv):
         x = np.random.uniform(0, 0.65)
         y = np.random.uniform(0.15, 0.3)
         z = self.table_height + 0.06  # slightly above the table to avoid collision at spawn
-        self.ycb_object.set_pose(sapien.Pose(p=[x, y, z]))
+        #self.ycb_object.set_pose(sapien.Pose(p=[x, y, z]))
 
     def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
         self._initialize_agent(env_idx)
