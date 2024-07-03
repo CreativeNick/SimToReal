@@ -64,9 +64,9 @@ class Args:
     """the number of parallel evaluation environments"""
     partial_reset: bool = True
     """toggle if the environments should perform partial resets"""
-    num_steps: int = 50
+    num_steps: int = 200
     """the number of steps to run in each environment per policy rollout"""
-    num_eval_steps: int = 50
+    num_eval_steps: int = 200
     """the number of steps to run in each evaluation environment during evaluation"""
     anneal_lr: bool = False
     """Toggle learning rate annealing for policy and value networks"""
@@ -223,7 +223,8 @@ if __name__ == "__main__":
     )
     envs = gym.make(
         args.env_id,
-        num_envs=args.num_envs if not args.evaluate else 1,
+        # num_envs=args.num_envs if not args.evaluate else 1,
+        num_envs=args.num_envs,
         **env_kwargs,
     )
     eval_envs = gym.make(
@@ -273,6 +274,7 @@ if __name__ == "__main__":
     ), "only continuous action space is supported"
 
     agent = Agent(envs).to(device)
+    # eval_agent = Agent(eval_envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup

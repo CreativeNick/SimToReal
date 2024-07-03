@@ -13,7 +13,7 @@ import torch
 import numpy as np
 
 
-@register_env("Bimanual_Allegro_Cube", max_episode_steps=400000)
+@register_env("Bimanual_Allegro_Cube", max_episode_steps=200)
 class Env(BaseEnv):
     SUPPORTED_ROBOTS = ["Bimanual_Allegro"]
 
@@ -135,6 +135,7 @@ class Env(BaseEnv):
             fail = torch.zeros_like(self.cube.pose.p[:, 0], dtype=torch.bool)
         state = {"success": self.cube.pose.p[:, 2] >= 1.3, "fail": fail}
         return state
+
 
     def compute_dense_reward(self, obs: Any, action: np.ndarray, info: Dict):
         total_reward = torch.zeros(len(obs), device=self.device)
