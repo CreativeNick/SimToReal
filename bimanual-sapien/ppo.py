@@ -19,7 +19,7 @@ import mani_skill.envs
 from mani_skill.utils.wrappers.flatten import FlattenActionSpaceWrapper
 from mani_skill.utils.wrappers.record import RecordEpisode
 from mani_skill.vector.wrappers.gymnasium import ManiSkillVectorEnv
-from envs.cube_env import Bimanual_Allegro
+from envs.ycb_env import Bimanual_Allegro
 
 
 @dataclass
@@ -52,7 +52,8 @@ class Args:
     """path to a pretrained checkpoint file to start evaluation/training from"""
 
     # Algorithm specific arguments
-    env_id: str = "PickCube-v1"
+    #env_id: str = "PickCube-v1"
+    env_id: str = "Bimanual_Allegro_YCB"
     """the id of the environment"""
     total_timesteps: int = 10000000
     """total timesteps of the experiments"""
@@ -218,7 +219,8 @@ if __name__ == "__main__":
     env_kwargs = dict(
         obs_mode="state",
         control_mode="pd_joint_delta_pos",
-        render_mode="human",
+        #render_mode="human", # Opens the GUI, shouldn't save videos
+        render_mode="rgb_array",
         sim_backend="gpu",
     )
     envs = gym.make(
@@ -274,7 +276,7 @@ if __name__ == "__main__":
     ), "only continuous action space is supported"
 
     agent = Agent(envs).to(device)
-    # eval_agent = Agent(eval_envs).to(device)
+    eval_agent = Agent(eval_envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
@@ -333,7 +335,7 @@ if __name__ == "__main__":
                     eval_obs, _, eval_terminations, eval_truncations, eval_infos = (
                         eval_envs.step(agent.get_action(eval_obs, deterministic=True))
                     )
-                    eval_envs.render()
+                    eval_envs.render() # Display/render environment during evaluation
                     if "final_info" in eval_infos:
                         mask = eval_infos["_final_info"]
                         eps_lens.append(

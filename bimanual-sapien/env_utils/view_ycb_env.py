@@ -16,7 +16,7 @@ env = gym.make(
     render_mode="human",
     control_mode="pd_joint_delta_pos",
     obs_mode="state",
-    sim_backend="cpu",
+    sim_backend="gpu",
 )
 env.reset()
 img = env.render()
@@ -27,7 +27,7 @@ while not done:
     action = env.action_space.sample()
     action = np.zeros_like(action)  # replace with your own action
     obs, reward, terminated, truncated, info = env.step(action)
-    done = terminated or truncated
+    # done = terminated or truncated
     img = env.render()  # a display is required to render
 
 env.close()

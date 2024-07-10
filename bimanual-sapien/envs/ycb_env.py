@@ -14,9 +14,10 @@ import torch
 import numpy as np
 
 from mani_skill.utils.io_utils import load_json
+from mani_skill.sensors.camera import CameraConfig
+from mani_skill.utils import sapien_utils
 
-
-@register_env("Bimanual_Allegro_YCB", max_episode_steps=400000)
+@register_env("Bimanual_Allegro_YCB", max_episode_steps=100)
 class Env(BaseEnv):
     SUPPORTED_ROBOTS = ["Bimanual_Allegro"]
 
@@ -61,20 +62,11 @@ class Env(BaseEnv):
         )
         table_builder.add_box_collision(
             pose=sapien.Pose(p=[0, 0.4, self.table_height]),
-            half_size=[0.7, 0.3, 0.02],
+            half_size=[0.7, 0.3, 0.02], # Why is this different from the visual half_size?
             material=sapien.physx.PhysxMaterial(0.5, 0.3, 0.6),
         )
         self.table = table_builder.build_static(name="table")
 
-        self.cube = actors.build_colorful_cube(
-            scene=self.scene,
-            half_size=0.05,
-            color=[1, 0, 0, 1],
-            name="cube",
-            body_type="dynamic",
-            add_collision=True,
-        )
-    
         self._load_ycb_object()
 
     def _load_ycb_object(self):
@@ -88,12 +80,6 @@ class Env(BaseEnv):
         print("Model ID: " + model_id)
         self.ycb_object = builder.build(name=f"ycb_object")
 
-        # set a random position for the object on the table
-        x = np.random.uniform(0, 0.65)
-        y = np.random.uniform(0.15, 0.3)
-        z = self.table_height + 0.06  # slightly above the table to avoid collision at spawn
-        #self.ycb_object.set_pose(sapien.Pose(p=[x, y, z]))
-
     def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
         self._initialize_agent(env_idx)
         self._initialize_actor(env_idx)
@@ -101,15 +87,31 @@ class Env(BaseEnv):
     def _initialize_actor(self, env_idx: torch.Tensor):
         with torch.device(self.device):
             b = len(env_idx)
-            cube_xyz = torch.tensor([0.1, 0.5, 1.25]).repeat(b, 1)
-            cube_xyz = torch.rand((b, 3)) * 0.02 + cube_xyz
-            cube_xyz[:, 2] = 1.25
+            
+            # Set initial position to middle of desired range
+            # x: default position on table (0.0)
+            # y: default position on table (0.5)
+            # z: slightly above table surface
+            ycb_xyz = torch.tensor([0.0, 0.5, self.table_height + 0.1]).repeat(b, 1)
+            
+            # Generate random offsets for x and y coordinates
+            x_rand = np.random.uniform(-0.7, 0.7)
+            y_rand = np.random.uniform(-0.4, 0.25)
 
+            # Adjust multipliers to match desired range
+            # x: random range of -0.7 to 0.7 based on x_rand
+            # y: random range of -0.4 to 0.25 based on y_rand
+            # z: no randomness, keep it 0
+            ycb_xyz = (torch.rand((b, 3)) * 0.5) * torch.tensor([x_rand, y_rand, 0.0]) + ycb_xyz
+        
+            # Set z to table height + 0.1 to avoid clipping through the table
+            ycb_xyz[:, 2] = self.table_height + 0.1
+
+            # Generate random orientations for the YCB object
             orn = random_quaternions(b, device=self.device)
 
-            cube_pose = Pose.create_from_pq(p=cube_xyz, q=orn)
-
-            self.cube.set_pose(cube_pose)
+            ycb_pose = Pose.create_from_pq(p=ycb_xyz, q=orn)
+            self.ycb_object.set_pose(ycb_pose)
 
     def _initialize_agent(self, env_idx: torch.Tensor):
         with torch.device(self.device):
@@ -127,13 +129,13 @@ class Env(BaseEnv):
 
     def _get_obs_extra(self, info: Dict):
         obs = dict(
-            cube_pos=self.cube.pose.p,
-            cube_q=self.cube.pose.q,
+            ycb_pos=self.ycb_object.pose.p,
+            ycb_q=self.ycb_object.pose.q,
         )
         if self._obs_mode in ["state", "state_dict"]:
             obs.update(
-                cube_ppos=self.cube.pose.p,
-                cube_q=self.cube.pose.q,
+                ycb_ppos=self.ycb_object.pose.p,
+                ycb_q=self.ycb_object.pose.q,
             )
         return obs
 
@@ -150,37 +152,37 @@ class Env(BaseEnv):
             fail_collision_table = (right_hand_link_z < self.table_height + 0.04).any(
                 dim=1
             )
-            fail_cube_fall = self.cube.pose.p[:, 2] < 1.0
-            fail = fail_collision_table | fail_cube_fall
+            fail_ycb_fall = self.ycb_object.pose.p[:, 2] < self.table_height
+            fail = fail_collision_table | fail_ycb_fall
         else:
-            fail = torch.zeros_like(self.cube.pose.p[:, 0], dtype=torch.bool)
-        state = {"success": self.cube.pose.p[:, 2] >= 1.3, "fail": fail}
+            fail = torch.zeros_like(self.ycb_object.pose.p[:, 0], dtype=torch.bool)
+        state = {"success": self.ycb_object.pose.p[:, 2] >= self.table_height + 0.2, "fail": fail}
         return state
 
     def compute_dense_reward(self, obs: Any, action: np.ndarray, info: Dict):
         total_reward = torch.zeros(len(obs), device=self.device)
 
-        cube_xyz = self.cube.pose.p
+        ycb_xyz = self.ycb_object.pose.p
 
-        lift_reward = cube_xyz[:, 2] - self.table_height - 0.07
+        lift_reward = ycb_xyz[:, 2] - self.table_height - 0.07
         total_reward += lift_reward * 20
 
         right_hand_tip_link_pose = torch.concat(
             [link.pose.p.unsqueeze(1) for link in self.right_hand_tip_link], dim=1
         ).to(self.device)
 
-        right_hand_cube_distance = torch.linalg.norm(
-            right_hand_tip_link_pose - cube_xyz.unsqueeze(1), axis=-1
+        right_hand_ycb_distance = torch.linalg.norm(
+            right_hand_tip_link_pose - ycb_xyz.unsqueeze(1), axis=-1
         )
 
         hand_close_reward = torch.clamp(
-            0.05 / right_hand_cube_distance, min=0, max=1.0
+            0.05 / right_hand_ycb_distance, min=0, max=1.0
         ).mean(dim=-1)
 
         right_hand_tip_center = right_hand_tip_link_pose.mean(dim=1)
 
         right_hand_tip_center_distance = torch.linalg.norm(
-            right_hand_tip_center - cube_xyz, axis=-1
+            right_hand_tip_center - ycb_xyz, axis=-1
         )
 
         center_close_reward = torch.clamp(
@@ -210,3 +212,31 @@ class Env(BaseEnv):
         dense_reward = self.compute_dense_reward(obs=obs, action=action, info=info)
         norm_dense_reward = dense_reward / (2 * self.max_reward) + 0.5
         return norm_dense_reward
+    
+    # Define camera configurations for rendering and capturing videos (training & evaluation)
+    @property
+    def _default_sensor_configs(self):
+        # Set up a camera for observations during training
+        pose = sapien_utils.look_at(eye=[0.5, 1.5, 2.0], 
+                                    target=[0.0, 0.5, self.table_height])
+        return [
+            CameraConfig(
+                "base_camera",
+                pose=pose,
+                width=128,
+                height=128,
+                fov=np.pi / 2,
+                near=0.01,
+                far=100,
+            )
+        ]
+
+    @property
+    def _default_human_render_camera_configs(self):
+        # Set up a high-definition camera for rendering and video recording
+        pose = sapien_utils.look_at(eye=[0.5, 1.5, 2.0], 
+                                    target=[0.0, 0.5, self.table_height])
+        return CameraConfig(
+            "render_camera", pose=pose, width=512, height=512, fov=1, near=0.01, far=100
+        )
+
