@@ -3,7 +3,7 @@ ManiSkill/
 bimanual-sapien/__pycache__
 bimanual-sapien/ycb/
 bimanual-sapien/mani_skill/
-videos/
+bimanual-sapien/videos/
+bimanual-sapien/runs/
 environment.yml
-runs/
 launch.json
