@@ -1,3 +1,4 @@
+.vscode/
 maniskill/
 ManiSkill/
 bimanual-sapien/__pycache__
@@ -6,4 +7,3 @@ bimanual-sapien/mani_skill/
 bimanual-sapien/videos/
 bimanual-sapien/runs/
 environment.yml
-launch.json
