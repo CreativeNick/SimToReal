@@ -42,14 +42,14 @@ class Bimanual_Allegro(BaseAgent):
     uid = "Bimanual_Allegro"
     urdf_path = "assets/urdf/ur5e_allegro/robots/dual_ur5e_allegro_inertia_changed.urdf"
     fix_root_link = True
-    disable_self_collisions = True
+    disable_self_collisions = False # Set to True to disable self-collision
     arm_qpos = np.zeros(12)
     arm_qpos[::2] = left_arm_init_qpos
     arm_qpos[1::2] = right_arm_init_qpos
 
     # add a cube
-    object_urdf_path = "assets/urdf/objects/cube.urdf"
-    object_init_pose = sapien.Pose(p=[0.61, 0.17, 1.3], q=[0, -0.7071068, 0, 0.7071068])
+    # object_urdf_path = "assets/urdf/objects/cube.urdf"
+    # object_init_pose = sapien.Pose(p=[0.61, 0.17, 1.3], q=[0, -0.7071068, 0, 0.7071068])
 
     keyframes = dict(
         init=Keyframe(
