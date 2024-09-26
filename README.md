@@ -9,12 +9,15 @@ git clone https://github.com/CreativeNick/SimToReal.git
 ```
 
 ### 2. Clone ManiSkill GitHub repository
-Visit the [ManiSkill repository](https://github.com/haosulab/ManiSkill) and follow the installation instructions. Be sure to install ManiSkill inside the `SimToReal/` folder.
+Visit the [ManiSkill repository](https://github.com/haosulab/ManiSkill) and follow the installation instructions. Be sure to clone/install ManiSkill inside the `SimToReal/` folder. It's recommened to do this in a virtual environment.
 
-### 3. Download YCB Assets
+## Optional Setup / Installation
+There are some libraries, assets, etc you may need to install when trouble-shooting. If the above installation works for you, then you may ignore this optional setup.
+
+### 1. Download YCB Assets
 This repo uses the Yale-CMU-Berkeley (YCB) Object and Model set, which you can learn more about [here](https://www.ycbbenchmarks.com/). To download the entire asset folder, follow the instructions found in the [ycb-tools repository](https://github.com/sea-bass/ycb-tools). Be sure to install the asset folder inside the `SimToReal/` folder.
 
-### 4. Download other libraries
+### 2. Download other libraries
 There may be other libraries/programs you may need to install before running certain commands, such as [tyro](https://pypi.org/project/tyro/) in `ppo.py`.
 ```
 pip install tyro
