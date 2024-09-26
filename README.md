@@ -9,7 +9,14 @@ git clone https://github.com/CreativeNick/SimToReal.git
 ```
 
 ### 2. Clone ManiSkill GitHub repository
-Visit the [ManiSkill repository](https://github.com/haosulab/ManiSkill) and follow the installation instructions. Be sure to clone/install ManiSkill inside the `SimToReal/` folder. It's recommened to do this in a virtual environment.
+Visit the [ManiSkill repository](https://github.com/haosulab/ManiSkill) and follow the installation instructions. Be sure to clone/install ManiSkill inside the `SimToReal/` folder. It's recommened to do this in a virtual environment. \
+In summary:
+> Create virtual environment  
+Run `pip install --upgrade mani_skill` to install ManiSkill package  
+Run `pip install torch torchvision torchaudio` to install Torch  
+Run `sudo apt-get install libvulkan1` to install Vulkan  
+Run `sudo apt-get install vulkan-utils` followed by `vulkaninfo` to test Vulkan installation
+
 
 ## Optional Setup / Installation
 There are some libraries, assets, etc you may need to install when trouble-shooting. If the above installation works for you, then you may ignore this optional setup.
