@@ -24,10 +24,10 @@ img = env.render()
 obs, _ = env.reset(seed=0)  # reset with a seed for determinism
 done = False
 while not done:
-    #action = env.action_space.sample()
+    action = env.action_space.sample()
     #action = np.zeros_like(action)  # replace with your own action
-    #obs, reward, terminated, truncated, info = env.step(action)
-    # done = terminated or truncated
+    obs, reward, terminated, truncated, info = env.step(action) # comment this out to freeze the simulation
+    #done = terminated or truncated
     img = env.render()  # a display is required to render
 
 env.close()

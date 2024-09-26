@@ -219,8 +219,8 @@ if __name__ == "__main__":
     env_kwargs = dict(
         obs_mode="state",
         control_mode="pd_joint_delta_pos",
-        #render_mode="human", # Opens the GUI, shouldn't save videos
-        render_mode="rgb_array",
+        render_mode="human", # Opens the GUI, shouldn't save videos
+        #render_mode="rgb_array",
         sim_backend="gpu",
     )
     envs = gym.make(

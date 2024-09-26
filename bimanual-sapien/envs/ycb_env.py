@@ -61,8 +61,8 @@ class Env(BaseEnv):
             ),
         )
         table_builder.add_box_collision(
-            pose=sapien.Pose(p=[0, 0.4, self.table_height]),
-            half_size=[0.7, 0.3, 0.02], # Why is this different from the visual half_size?
+            pose=sapien.Pose(p=[0, 0.5, self.table_height]),
+        	half_size=[0.7, 0.5, 0.02],
             material=sapien.physx.PhysxMaterial(0.5, 0.3, 0.6),
         )
         self.table = table_builder.build_static(name="table")
