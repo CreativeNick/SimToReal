@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <robot name="dual_ur5e_ability" xmlns:xacro="http://ros.org/wiki/xacro">
 
-<!-- ONLY HAND COLLISIONS dual_ur5e_allegro_inertia_changed FILE -->
+<!-- ONLY HAND, NO PALM/WRIST-BASE COLLISIONS dual_ur5e_allegro_inertia_changed FILE -->
 
   <!--################################################
   ########              arm                    #######
@@ -406,13 +406,13 @@
         <mesh filename="meshes/mount-left.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
-    <!-- ***LEFT PALM*** -->
-    <collision>
+    <!-- *** LEFT PALM - Name: wrist_base; ID: 9 *** -->
+    <!-- <collision>
       <origin rpy="0 0 0" xyz="-0.009300 0 -0.0475"/>
       <geometry>
         <box size="0.0408 0.1130 0.095"/>
       </geometry>
-    </collision>
+    </collision> -->
   </link>
 
   <!-- ============================================================================= -->
@@ -1025,13 +1025,13 @@
         <mesh filename="meshes/mount-right.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </visual>
-    <!-- ***RIGHT PALM*** -->
-    <collision>
+    <!-- *** RIGHT PALM - Name: wrist_base_r; ID: 37 *** -->
+    <!-- <collision>
       <origin rpy="0 0 0" xyz="-0.009300 0 -0.0475"/>
       <geometry>
         <box size="0.0408 0.1130 0.095"/>
       </geometry>
-    </collision>
+    </collision> -->
   </link>
   
   <!-- ============================================================================= -->
