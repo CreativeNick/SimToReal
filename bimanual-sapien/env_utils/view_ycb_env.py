@@ -26,6 +26,7 @@ done = False
 while not done:
     action = env.action_space.sample()
     #action = np.zeros_like(action)  # replace with your own action
+    action = np.zeros_like(env.action_space.sample())  # zero action
     obs, reward, terminated, truncated, info = env.step(action) # comment this out to freeze the simulation
     #done = terminated or truncated
     img = env.render()  # a display is required to render
