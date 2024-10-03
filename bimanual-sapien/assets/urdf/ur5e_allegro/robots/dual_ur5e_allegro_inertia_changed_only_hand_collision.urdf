@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <robot name="dual_ur5e_ability" xmlns:xacro="http://ros.org/wiki/xacro">
 
-<!-- ORIGINAL dual_ur5e_allegro_inertia_changed FILE -->
+<!-- ONLY HAND COLLISIONS dual_ur5e_allegro_inertia_changed FILE -->
 
   <!--################################################
   ########              arm                    #######
@@ -14,18 +14,18 @@
       </geometry>
       <origin rpy="1.5708 0 0" xyz="0 0 -1.1"/>
     </visual>
-    <collision>
+<!--     <collision>
       <geometry name="ur_stand_base_vertical">
         <cylinder radius="0.06" length="1.4"/>
       </geometry>
       <origin rpy="0 0 0" xyz="0 0 -0.2"/>
-    </collision>
-    <collision>
+</collision> -->
+<!--     <collision>
       <geometry name="ur_stand_base_horizontal">
         <cylinder radius="0.06" length="0.56"/>
       </geometry>
       <origin rpy="0 1.5707 0" xyz="0 0 0.5"/>
-    </collision>
+</collision> -->
     <inertial>
       <mass value="4.0"/>
       <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
@@ -71,11 +71,11 @@
         <mesh filename="../meshes/ur5e/visual/shoulder.dae"/>
       </geometry>
     </visual>
-    <collision>
+<!--     <collision>
       <geometry>
         <mesh filename="../meshes/ur5e/collision/shoulder.stl" scale="1.0 1.0 1.0"/>
       </geometry>
-    </collision>
+</collision> -->
     <inertial>
       <mass value="3.7"/>
       <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
@@ -98,11 +98,11 @@
         <mesh filename="../meshes/ur5e/visual/shoulder.dae"/>
       </geometry>
     </visual>
-    <collision>
+<!--     <collision>
       <geometry>
         <mesh filename="../meshes/ur5e/collision/shoulder.stl" scale="1.0 1.0 1.0"/>
       </geometry>
-    </collision>
+</collision> -->
     <inertial>
       <mass value="3.7"/>
       <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
@@ -125,11 +125,11 @@
         <mesh filename="../meshes/ur5e/visual/upperarm.dae"/>
       </geometry>
     </visual>
-    <collision>
+<!--     <collision>
       <geometry>
         <mesh filename="../meshes/ur5e/collision/upperarm.stl" scale="1.0 1.0 1.0"/>
       </geometry>
-    </collision>
+</collision> -->
     <inertial>
       <mass value="8.393"/>
       <origin rpy="0 0 0" xyz="0.0 0.0 0.2125"/>
@@ -152,11 +152,11 @@
         <mesh filename="../meshes/ur5e/visual/upperarm.dae"/>
       </geometry>
     </visual>
-    <collision>
+<!--     <collision>
       <geometry>
         <mesh filename="../meshes/ur5e/collision/upperarm.stl" scale="1.0 1.0 1.0"/>
       </geometry>
-    </collision>
+</collision> -->
     <inertial>
       <mass value="8.393"/>
       <origin rpy="0 0 0" xyz="0.0 0.0 0.2125"/>
@@ -179,11 +179,11 @@
         <mesh filename="../meshes/ur5e/visual/forearm.dae"/>
       </geometry>
     </visual>
-    <collision>
+<!--     <collision>
       <geometry>
         <mesh filename="../meshes/ur5e/collision/forearm.stl" scale="1.0 1.0 1.0"/>
       </geometry>
-    </collision>
+</collision> -->
     <inertial>
       <mass value="2.275"/>
       <origin rpy="0 0 0" xyz="0.0 0.0 0.196"/>
@@ -206,11 +206,11 @@
         <mesh filename="../meshes/ur5e/visual/forearm.dae"/>
       </geometry>
     </visual>
-    <collision>
+<!--     <collision>
       <geometry>
         <mesh filename="../meshes/ur5e/collision/forearm.stl" scale="1.0 1.0 1.0"/>
       </geometry>
-    </collision>
+</collision> -->
     <inertial>
       <mass value="2.275"/>
       <origin rpy="0 0 0" xyz="0.0 0.0 0.196"/>
@@ -1031,6 +1031,7 @@
       </geometry>
     </collision>
   </link>
+  
   <!-- ============================================================================= -->
   <!-- FINGERS -->
   <!-- RIGHT HAND due to which finger is number 0 -->
