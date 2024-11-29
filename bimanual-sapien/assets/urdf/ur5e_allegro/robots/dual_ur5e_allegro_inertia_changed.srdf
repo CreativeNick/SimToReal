@@ -1,6 +1,9 @@
 <?xml version="1.0" ?>
 <robot name="dual_ur5e_ability">
-    <!-- Define groups for hands -->
+    <!--GROUPS: Representation of a set of joints and links. This can be useful for specifying DOF to plan for, defining arms, end effectors, etc-->
+    <!--LINKS: When a link is specified, the parent joint of that link (if it exists) is automatically included-->
+
+    <!-- Groups for hands -->
     <group name="left_hand">
         <link name="wrist_base"/>
         <link name="link_0.0"/>
