@@ -16,7 +16,7 @@ env = gym.make(
     render_mode="human",
     control_mode="pd_joint_delta_pos",
     obs_mode="state",
-    sim_backend="gpu",
+    sim_backend="cpu", # "cpu" or "gpu"
 )
 env.reset()
 img = env.render()
