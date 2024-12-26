@@ -41,6 +41,7 @@ right_hand_init_qpos = np.zeros(16)
 class Bimanual_Allegro(BaseAgent):
     uid = "Bimanual_Allegro"
     urdf_path = "assets/urdf/ur5e_allegro/robots/dual_ur5e_allegro_inertia_changed.urdf"
+    #srdf_path = "assets/urdf/ur5e_allegro/robots/dual_ur5e_allegro_inertia_changed.srdf"
     fix_root_link = True
     disable_self_collisions = False # Set to True to disable self-collision
     arm_qpos = np.zeros(12)

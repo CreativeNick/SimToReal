@@ -1,36 +1,37 @@
-<?xml version="1.0" ?>
-<robot name="dual_ur5e_ability">
-    <!--GROUPS: Representation of a set of joints and links. This can be useful for specifying DOF to plan for, defining arms, end effectors, etc-->
-    <!--LINKS: When a link is specified, the parent joint of that link (if it exists) is automatically included-->
-
-    <!-- Groups for hands -->
-    <group name="left_hand">
-        <link name="wrist_base"/>
-        <link name="link_0.0"/>
-        <link name="link_4.0"/>
-        <link name="link_8.0"/>
-        <link name="link_12.0"/>
-    </group>
-
-    <group name="right_hand">
-        <link name="wrist_base_r"/>
-        <link name="link_0.0_r"/>
-        <link name="link_4.0_r"/>
-        <link name="link_8.0_r"/>
-        <link name="link_12.0_r"/>
-    </group>
-
-    <!-- Disable collisions for left wrist -->
+<?xml version="1.0" encoding="utf-8"?>
+<robot name="dual_ur5e_ability" xmlns:xacro="http://ros.org/wiki/xacro">
+    <!-- Left hand collision rules -->
     <disable_collisions link1="wrist_base" link2="wrist_3_link" reason="Adjacent"/>
     <disable_collisions link1="wrist_base" link2="link_0.0" reason="Adjacent"/>
     <disable_collisions link1="wrist_base" link2="link_4.0" reason="Adjacent"/>
     <disable_collisions link1="wrist_base" link2="link_8.0" reason="Adjacent"/>
     <disable_collisions link1="wrist_base" link2="link_12.0" reason="Adjacent"/>
     
-    <!-- Disable collisions for right wrist -->
+    <!-- Disable collisions between left hand fingers -->
+    <disable_collisions link1="link_0.0" link2="link_4.0" reason="Never"/>
+    <disable_collisions link1="link_0.0" link2="link_8.0" reason="Never"/>
+    <disable_collisions link1="link_0.0" link2="link_12.0" reason="Never"/>
+    <disable_collisions link1="link_4.0" link2="link_8.0" reason="Never"/>
+    <disable_collisions link1="link_4.0" link2="link_12.0" reason="Never"/>
+    <disable_collisions link1="link_8.0" link2="link_12.0" reason="Never"/>
+    
+    <!-- Right hand collision rules -->
     <disable_collisions link1="wrist_base_r" link2="wrist_3_link_r" reason="Adjacent"/>
     <disable_collisions link1="wrist_base_r" link2="link_0.0_r" reason="Adjacent"/>
     <disable_collisions link1="wrist_base_r" link2="link_4.0_r" reason="Adjacent"/>
     <disable_collisions link1="wrist_base_r" link2="link_8.0_r" reason="Adjacent"/>
     <disable_collisions link1="wrist_base_r" link2="link_12.0_r" reason="Adjacent"/>
+    
+    <!-- Disable collisions between right hand fingers -->
+    <disable_collisions link1="link_0.0_r" link2="link_4.0_r" reason="Never"/>
+    <disable_collisions link1="link_0.0_r" link2="link_8.0_r" reason="Never"/>
+    <disable_collisions link1="link_0.0_r" link2="link_12.0_r" reason="Never"/>
+    <disable_collisions link1="link_4.0_r" link2="link_8.0_r" reason="Never"/>
+    <disable_collisions link1="link_4.0_r" link2="link_12.0_r" reason="Never"/>
+    <disable_collisions link1="link_8.0_r" link2="link_12.0_r" reason="Never"/>
+    
+    <!-- Disable collisions between wrists -->
+    <disable_collisions link1="wrist_base" link2="wrist_base_r" reason="Never"/>
+    <disable_collisions link1="wrist_base" link2="wrist_3_link_r" reason="Never"/>
+    <disable_collisions link1="wrist_base_r" link2="wrist_3_link" reason="Never"/>
 </robot>
