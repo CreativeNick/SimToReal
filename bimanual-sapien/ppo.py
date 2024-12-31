@@ -55,7 +55,7 @@ class Args:
     #env_id: str = "PickCube-v1"
     env_id: str = "Bimanual_Allegro_YCB"
     """the id of the environment"""
-    total_timesteps: int = 10000000
+    total_timesteps: int = 20000000
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
@@ -65,9 +65,9 @@ class Args:
     """the number of parallel evaluation environments"""
     partial_reset: bool = True
     """toggle if the environments should perform partial resets"""
-    num_steps: int = 200
+    num_steps: int = 400
     """the number of steps to run in each environment per policy rollout"""
-    num_eval_steps: int = 200
+    num_eval_steps: int = 400
     """the number of steps to run in each evaluation environment during evaluation"""
     anneal_lr: bool = False
     """Toggle learning rate annealing for policy and value networks"""
@@ -219,8 +219,8 @@ if __name__ == "__main__":
     env_kwargs = dict(
         obs_mode="state",
         control_mode="pd_joint_delta_pos",
-        render_mode="human", # Opens the GUI, shouldn't save videos
-        #render_mode="rgb_array",
+        #render_mode="human", # Opens the GUI, shouldn't save videos
+        render_mode="rgb_array",
         sim_backend="gpu",
     )
     envs = gym.make(

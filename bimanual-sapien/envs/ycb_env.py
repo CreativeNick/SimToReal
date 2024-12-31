@@ -17,7 +17,7 @@ from mani_skill.utils.io_utils import load_json
 from mani_skill.sensors.camera import CameraConfig
 from mani_skill.utils import sapien_utils
 
-@register_env("Bimanual_Allegro_YCB", max_episode_steps=100)
+@register_env("Bimanual_Allegro_YCB", max_episode_steps=400)
 class Env(BaseEnv):
     SUPPORTED_ROBOTS = ["Bimanual_Allegro"]
 
@@ -34,6 +34,8 @@ class Env(BaseEnv):
         self.left_hand_link = []
         self.left_hand_tip_link = []
         self.right_hand_tip_link = []
+
+        self.max_reward = 5.0
 
         super().__init__(*args, robot_uids=robot_uids, **kwargs)
 
@@ -156,7 +158,20 @@ class Env(BaseEnv):
             fail = fail_collision_table | fail_ycb_fall
         else:
             fail = torch.zeros_like(self.ycb_object.pose.p[:, 0], dtype=torch.bool)
-        state = {"success": self.ycb_object.pose.p[:, 2] >= self.table_height + 0.2, "fail": fail}
+            
+        # Create success condition
+        success = self.ycb_object.pose.p[:, 2] >= 1.3
+        
+        # Calculate reward directly here instead of calling compute_dense_reward
+        reward = torch.zeros_like(self.ycb_object.pose.p[:, 0], device=self.device)
+        reward[success] = self.max_reward
+        reward[fail] = -self.max_reward / 4
+        
+        state = {
+            "success": success,
+            "fail": fail,
+            "episode": {"r": reward}
+        }
         return state
 
     def compute_dense_reward(self, obs: Any, action: np.ndarray, info: Dict):

@@ -12,6 +12,9 @@ from typing import Union, Any, Dict
 import torch
 import numpy as np
 
+from mani_skill.utils.io_utils import load_json
+from mani_skill.sensors.camera import CameraConfig
+from mani_skill.utils import sapien_utils
 
 @register_env("Bimanual_Allegro_Cube", max_episode_steps=200)
 class Env(BaseEnv):
@@ -25,6 +28,7 @@ class Env(BaseEnv):
         self.robot_init_qpos_noise = robot_init_qpos_noise
         self.table_height = 1.1
         self.initialized = False
+        self.max_reward = 5.0
 
         self.right_hand_link = []
         self.left_hand_link = []
@@ -133,7 +137,20 @@ class Env(BaseEnv):
             fail = fail_collision_table | fail_cube_fall
         else:
             fail = torch.zeros_like(self.cube.pose.p[:, 0], dtype=torch.bool)
-        state = {"success": self.cube.pose.p[:, 2] >= 1.3, "fail": fail}
+        
+        # Create success condition
+        success = self.cube.pose.p[:, 2] >= 1.3
+        
+        # Calculate reward directly here instead of calling compute_dense_reward
+        reward = torch.zeros_like(self.cube.pose.p[:, 0], device=self.device)
+        reward[success] = self.max_reward
+        reward[fail] = -self.max_reward / 4
+        
+        state = {
+            "success": success,
+            "fail": fail,
+            "episode": {"r": reward}
+        }
         return state
 
 
@@ -190,3 +207,30 @@ class Env(BaseEnv):
         dense_reward = self.compute_dense_reward(obs=obs, action=action, info=info)
         norm_dense_reward = dense_reward / (2 * self.max_reward) + 0.5
         return norm_dense_reward
+
+    # Define camera configurations for rendering and capturing videos (training & evaluation)
+    @property
+    def _default_sensor_configs(self):
+        # Set up a camera for observations during training
+        pose = sapien_utils.look_at(eye=[0.5, 1.5, 2.0], 
+                                    target=[0.0, 0.5, self.table_height])
+        return [
+            CameraConfig(
+                "base_camera",
+                pose=pose,
+                width=128,
+                height=128,
+                fov=np.pi / 2,
+                near=0.01,
+                far=100,
+            )
+        ]
+
+    @property
+    def _default_human_render_camera_configs(self):
+        # Set up a high-definition camera for rendering and video recording
+        pose = sapien_utils.look_at(eye=[0.5, 1.5, 2.0], 
+                                    target=[0.0, 0.5, self.table_height])
+        return CameraConfig(
+            "render_camera", pose=pose, width=512, height=512, fov=1, near=0.01, far=100
+        )
