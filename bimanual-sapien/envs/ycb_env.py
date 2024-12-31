@@ -17,6 +17,8 @@ from mani_skill.utils.io_utils import load_json
 from mani_skill.sensors.camera import CameraConfig
 from mani_skill.utils import sapien_utils
 
+import time
+
 @register_env("Bimanual_Allegro_YCB", max_episode_steps=400)
 class Env(BaseEnv):
     SUPPORTED_ROBOTS = ["Bimanual_Allegro"]
@@ -77,9 +79,14 @@ class Env(BaseEnv):
                 load_json(ASSET_DIR / "assets/mani_skill2_ycb/info_pick_v0.json").keys()
             )
         )
-        model_id = np.random.choice(self.all_model_ids)
+        
+        # create a new random state instance with a seed based on current time
+        rng = np.random.RandomState(int(time.time() * 1000) % 10000)
+        
+        # use this RNG instance to select the model
+        model_id = rng.choice(self.all_model_ids)
         builder = actors.get_actor_builder(self.scene, id=f"ycb:{model_id}")
-        print("Model ID: " + model_id)
+        print(f"Loading YCB object: {model_id}")
         self.ycb_object = builder.build(name=f"ycb_object")
 
     def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
@@ -151,16 +158,16 @@ class Env(BaseEnv):
                 dim=1,
             )
 
-            fail_collision_table = (right_hand_link_z < self.table_height + 0.04).any(
+            fail_collision_table = (right_hand_link_z < self.table_height + 0.02).any(
                 dim=1
             )
-            fail_ycb_fall = self.ycb_object.pose.p[:, 2] < self.table_height
+            fail_ycb_fall = self.ycb_object.pose.p[:, 2] < self.table_height - 0.02
             fail = fail_collision_table | fail_ycb_fall
         else:
             fail = torch.zeros_like(self.ycb_object.pose.p[:, 0], dtype=torch.bool)
             
         # Create success condition
-        success = self.ycb_object.pose.p[:, 2] >= 1.3
+        success = self.ycb_object.pose.p[:, 2] >= 1.25
         
         # Calculate reward directly here instead of calling compute_dense_reward
         reward = torch.zeros_like(self.ycb_object.pose.p[:, 0], device=self.device)
@@ -180,31 +187,42 @@ class Env(BaseEnv):
         ycb_xyz = self.ycb_object.pose.p
 
         lift_reward = ycb_xyz[:, 2] - self.table_height - 0.07
-        total_reward += lift_reward * 20
+        total_reward += lift_reward * 15
 
+        # get finger tip pose
         right_hand_tip_link_pose = torch.concat(
             [link.pose.p.unsqueeze(1) for link in self.right_hand_tip_link], dim=1
         ).to(self.device)
 
+        # Add finger spread reward to encourage finger movement
+        finger_positions = torch.stack([link.pose.p for link in self.right_hand_link], dim=1)
+        finger_spread = torch.std(finger_positions, dim=1).mean(dim=-1)
+        finger_spread_reward = torch.clamp(finger_spread * 5.0, 0, 1.0)
+        total_reward += finger_spread_reward
+
+        # calculate distance between finger tip and ycb object
         right_hand_ycb_distance = torch.linalg.norm(
             right_hand_tip_link_pose - ycb_xyz.unsqueeze(1), axis=-1
         )
 
-        hand_close_reward = torch.clamp(
-            0.05 / right_hand_ycb_distance, min=0, max=1.0
-        ).mean(dim=-1)
+        # calculate reward based on distance
+        #hand_close_reward = torch.clamp(0.05 / right_hand_ycb_distance, min=0, max=1.0).mean(dim=-1)
+        hand_close_reward = torch.exp(-2.0 * right_hand_ycb_distance).mean(dim=-1)
+        total_reward += hand_close_reward * 2.0
 
         right_hand_tip_center = right_hand_tip_link_pose.mean(dim=1)
-
         right_hand_tip_center_distance = torch.linalg.norm(
             right_hand_tip_center - ycb_xyz, axis=-1
         )
 
-        center_close_reward = torch.clamp(
-            0.025 / right_hand_tip_center_distance, min=0, max=1.0
-        )
-
+        #center_close_reward = torch.clamp(0.025 / right_hand_tip_center_distance, min=0, max=1.0)
+        center_close_reward = torch.exp(-2.0 * right_hand_tip_center_distance)
         total_reward += hand_close_reward + center_close_reward
+
+        # calculate height-based reward
+        height_diff = ycb_xyz[:, 2] - self.table_height
+        height_reward = torch.where(height_diff > 0, height_diff * 10.0, torch.zeros_like(height_diff))
+        total_reward += height_reward
 
         total_reward = total_reward.clamp(-self.max_reward, self.max_reward)
 

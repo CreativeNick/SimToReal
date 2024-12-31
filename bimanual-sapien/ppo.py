@@ -106,6 +106,9 @@ class Args:
     """the mini-batch size (computed in runtime)"""
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
+    
+    reconfiguration_freq: int = 10
+    """how often to reconfigure the environment (in terms of iterations)"""
 
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
@@ -219,8 +222,8 @@ if __name__ == "__main__":
     env_kwargs = dict(
         obs_mode="state",
         control_mode="pd_joint_delta_pos",
-        #render_mode="human", # Opens the GUI, shouldn't save videos
-        render_mode="rgb_array",
+        render_mode="human", # Opens the GUI, shouldn't save videos
+        #render_mode="rgb_array",
         sim_backend="gpu",
     )
     envs = gym.make(
@@ -320,6 +323,12 @@ if __name__ == "__main__":
 
     for iteration in range(1, args.num_iterations + 1):
         print(f"Epoch: {iteration}, global_step={global_step}")
+
+        # reconfiguration check
+        if iteration % args.reconfiguration_freq == 0:
+            print("Reconfiguring environment...")
+            envs.reconfigure()  # trigger _load_scene again
+
         final_values = torch.zeros((args.num_steps, args.num_envs), device=device)
         agent.eval()
         if iteration % args.eval_freq == 1:
