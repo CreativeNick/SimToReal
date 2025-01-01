@@ -92,12 +92,12 @@ class Env(BaseEnv):
         model_id = rng.choice(self.all_model_ids)
         print(f"Loading YCB object: {model_id} (seed: {current_seed})")
         
-        # if we already have an object, just change its model
+        # if object already exists, only change its model
         if hasattr(self, 'ycb_object'):
             # move it far away temporarily (effectively hiding it)
             self.ycb_object.set_pose(sapien.Pose(p=[1000, 1000, 1000]))
         else:
-            # first time - create the object
+            # create the object for first time
             builder = actors.get_actor_builder(self.scene, id=f"ycb:{model_id}")
             self.ycb_object = builder.build(name=f"ycb_object")
 
