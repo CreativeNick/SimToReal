@@ -71,7 +71,7 @@ class Env(BaseEnv):
         )
         self.table = table_builder.build_static(name="table")
 
-        # Load all model IDs
+        # load all model IDs
         self.all_model_ids = np.array(
             list(
                 load_json(ASSET_DIR / "assets/mani_skill2_ycb/info_pick_v0.json").keys()
@@ -79,25 +79,25 @@ class Env(BaseEnv):
         )
         print(f"Available YCB objects: {len(self.all_model_ids)}")
         
-        # Select initial model
+        # select initial model
         self._load_ycb_object()
 
     def _load_ycb_object(self):
         """Load a random YCB object into the scene."""
-        # Create a new random seed based on current time
+        # create a new random seed based on current time
         current_seed = int(time.time() * 1000.0) % (2**32 - 1)
         rng = np.random.RandomState(current_seed)
         
-        # Select a random model ID using our specific RNG
+        # select a random model ID
         model_id = rng.choice(self.all_model_ids)
         print(f"Loading YCB object: {model_id} (seed: {current_seed})")
         
-        # If we already have an object, just change its model
+        # if we already have an object, just change its model
         if hasattr(self, 'ycb_object'):
-            # Move it far away temporarily (effectively hiding it)
+            # move it far away temporarily (effectively hiding it)
             self.ycb_object.set_pose(sapien.Pose(p=[1000, 1000, 1000]))
         else:
-            # First time - create the object
+            # first time - create the object
             builder = actors.get_actor_builder(self.scene, id=f"ycb:{model_id}")
             self.ycb_object = builder.build(name=f"ycb_object")
 
@@ -179,10 +179,10 @@ class Env(BaseEnv):
         else:
             fail = torch.zeros_like(self.ycb_object.pose.p[:, 0], dtype=torch.bool)
             
-        # Create success condition
+        # create success condition
         success = self.ycb_object.pose.p[:, 2] >= 1.25
         
-        # Calculate reward directly here instead of calling compute_dense_reward
+        # calculate reward directly here instead of calling compute_dense_reward
         reward = torch.zeros_like(self.ycb_object.pose.p[:, 0], device=self.device)
         reward[success] = self.max_reward
         reward[fail] = -self.max_reward / 4
