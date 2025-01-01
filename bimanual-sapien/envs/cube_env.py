@@ -208,10 +208,8 @@ class Env(BaseEnv):
         norm_dense_reward = dense_reward / (2 * self.max_reward) + 0.5
         return norm_dense_reward
 
-    # Define camera configurations for rendering and capturing videos (training & evaluation)
     @property
     def _default_sensor_configs(self):
-        # Set up a camera for observations during training
         pose = sapien_utils.look_at(eye=[0.5, 1.5, 2.0], 
                                     target=[0.0, 0.5, self.table_height])
         return [
@@ -228,7 +226,6 @@ class Env(BaseEnv):
 
     @property
     def _default_human_render_camera_configs(self):
-        # Set up a high-definition camera for rendering and video recording
         pose = sapien_utils.look_at(eye=[0.5, 1.5, 2.0], 
                                     target=[0.0, 0.5, self.table_height])
         return CameraConfig(

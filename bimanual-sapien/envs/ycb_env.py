@@ -71,23 +71,36 @@ class Env(BaseEnv):
         )
         self.table = table_builder.build_static(name="table")
 
-        self._load_ycb_object()
-
-    def _load_ycb_object(self):
+        # Load all model IDs
         self.all_model_ids = np.array(
             list(
                 load_json(ASSET_DIR / "assets/mani_skill2_ycb/info_pick_v0.json").keys()
             )
         )
+        print(f"Available YCB objects: {len(self.all_model_ids)}")
         
-        # create a new random state instance with a seed based on current time
-        rng = np.random.RandomState(int(time.time() * 1000) % 10000)
+        # Select initial model
+        self._load_ycb_object()
+
+    def _load_ycb_object(self):
+        """Load a random YCB object into the scene."""
+        # Create a new random seed based on current time
+        current_seed = int(time.time() * 1000.0) % (2**32 - 1)
+        rng = np.random.RandomState(current_seed)
         
-        # use this RNG instance to select the model
+        # Select a random model ID using our specific RNG
         model_id = rng.choice(self.all_model_ids)
-        builder = actors.get_actor_builder(self.scene, id=f"ycb:{model_id}")
-        print(f"Loading YCB object: {model_id}")
-        self.ycb_object = builder.build(name=f"ycb_object")
+        print(f"Loading YCB object: {model_id} (seed: {current_seed})")
+        
+        # If we already have an object, just change its model
+        if hasattr(self, 'ycb_object'):
+            # Move it far away temporarily (effectively hiding it)
+            self.ycb_object.set_pose(sapien.Pose(p=[1000, 1000, 1000]))
+        else:
+            # First time - create the object
+            builder = actors.get_actor_builder(self.scene, id=f"ycb:{model_id}")
+            self.ycb_object = builder.build(name=f"ycb_object")
+
 
     def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
         self._initialize_agent(env_idx)
@@ -246,10 +259,8 @@ class Env(BaseEnv):
         norm_dense_reward = dense_reward / (2 * self.max_reward) + 0.5
         return norm_dense_reward
     
-    # Define camera configurations for rendering and capturing videos (training & evaluation)
     @property
     def _default_sensor_configs(self):
-        # Set up a camera for observations during training
         pose = sapien_utils.look_at(eye=[0.5, 1.5, 2.0], 
                                     target=[0.0, 0.5, self.table_height])
         return [
@@ -266,10 +277,23 @@ class Env(BaseEnv):
 
     @property
     def _default_human_render_camera_configs(self):
-        # Set up a high-definition camera for rendering and video recording
         pose = sapien_utils.look_at(eye=[0.5, 1.5, 2.0], 
                                     target=[0.0, 0.5, self.table_height])
         return CameraConfig(
             "render_camera", pose=pose, width=512, height=512, fov=1, near=0.01, far=100
         )
+    
+    def reconfigure(self):
+        """Reconfigure the environment by changing the YCB object."""
+        print("Starting reconfiguration...")
+        
+        # move existing obj far away and change its model
+        if hasattr(self, "ycb_object"):
+            self.ycb_object.set_pose(sapien.Pose(p=[1000, 1000, 1000]))
+        
+        self._load_ycb_object()
+        
+        # reinitialize any environment state variables
+        self.initialized = True
+        print("Reconfiguration complete")
 

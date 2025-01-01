@@ -222,8 +222,8 @@ if __name__ == "__main__":
     env_kwargs = dict(
         obs_mode="state",
         control_mode="pd_joint_delta_pos",
-        render_mode="human", # Opens the GUI, shouldn't save videos
-        #render_mode="rgb_array",
+        #render_mode="human", # Opens the GUI, shouldn't save videos
+        render_mode="rgb_array",
         sim_backend="gpu",
     )
     envs = gym.make(
@@ -327,7 +327,15 @@ if __name__ == "__main__":
         # reconfiguration check
         if iteration % args.reconfiguration_freq == 0:
             print("Reconfiguring environment...")
-            envs.reconfigure()  # trigger _load_scene again
+            try:
+                # reconfigure both training and eval environments
+                if hasattr(envs.unwrapped, 'reconfigure'):
+                    envs.unwrapped.reconfigure()
+                if args.num_eval_envs > 0 and hasattr(eval_envs.unwrapped, 'reconfigure'):
+                    eval_envs.unwrapped.reconfigure()
+                print("Environment reconfigured successfully")
+            except Exception as e:
+                print(f"Warning: Reconfiguration failed: {e}")
 
         final_values = torch.zeros((args.num_steps, args.num_envs), device=device)
         agent.eval()
