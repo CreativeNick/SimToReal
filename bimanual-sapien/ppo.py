@@ -342,6 +342,13 @@ if __name__ == "__main__":
         if iteration % args.eval_freq == 1:
             # evaluate
             print("Evaluating")
+
+            # reset and reconfigure eval environments to ensure randomization
+            eval_envs.reset()
+            if args.num_eval_envs > 0 and hasattr(eval_envs.unwrapped, 'reconfigure'):
+                print("Reconfiguring evaluation environments...")
+                eval_envs.unwrapped.reconfigure()
+
             eval_envs.reset()
             returns = []
             eps_lens = []
