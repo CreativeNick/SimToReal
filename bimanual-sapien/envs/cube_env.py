@@ -155,7 +155,8 @@ class Env(BaseEnv):
 
 
     def compute_dense_reward(self, obs: Any, action: np.ndarray, info: Dict):
-        total_reward = torch.zeros(len(obs), device=self.device)
+        batch_size = self.cube.pose.p.shape[0]
+        total_reward = torch.zeros(batch_size, device=self.device)
 
         cube_xyz = self.cube.pose.p
 
