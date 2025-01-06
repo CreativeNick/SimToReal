@@ -17,9 +17,9 @@ from mani_skill.utils.io_utils import load_json
 from mani_skill.sensors.camera import CameraConfig
 from mani_skill.utils import sapien_utils
 
-import time
+from mani_skill.utils.structs import Actor
 
-@register_env("Bimanual_Allegro_YCB", max_episode_steps=400)
+@register_env("Bimanual_Allegro_YCB", max_episode_steps=100)
 class Env(BaseEnv):
     SUPPORTED_ROBOTS = ["Bimanual_Allegro"]
 
@@ -28,6 +28,13 @@ class Env(BaseEnv):
     def __init__(
         self, *args, robot_uids="Bimanual_Allegro", robot_init_qpos_noise=0.02, **kwargs
     ):
+        # load all YCB model IDs before initializion
+        self.all_model_ids = np.array(
+            list(
+                load_json(ASSET_DIR / "assets/mani_skill2_ycb/info_pick_v0.json").keys()
+            )
+        )
+
         self.robot_init_qpos_noise = robot_init_qpos_noise
         self.table_height = 1.1
         self.initialized = False
@@ -53,6 +60,13 @@ class Env(BaseEnv):
                 self.left_hand_tip_link.append(link)
         self.initialized = True
 
+    def reconfigure(self):
+        """Called by the training loop to reconfigure environment"""
+        if hasattr(self.scene, 'reconfigure'):
+            self.scene.reconfigure()
+        # After reconfiguration, re-initialize the episode
+        self._initialize_episode(torch.arange(self.num_envs, device=self.device), {})
+
     def _load_scene(self, options: dict):
         build_ground(self.scene)
 
@@ -71,36 +85,17 @@ class Env(BaseEnv):
         )
         self.table = table_builder.build_static(name="table")
 
-        # load all model IDs
-        self.all_model_ids = np.array(
-            list(
-                load_json(ASSET_DIR / "assets/mani_skill2_ycb/info_pick_v0.json").keys()
-            )
-        )
-        print(f"Available YCB objects: {len(self.all_model_ids)}")
+        # sample YCB objects for each parallel environment
+        model_ids = self._batched_episode_rng.choice(self.all_model_ids)
         
-        # select initial model
-        self._load_ycb_object()
+        stored_actors = []  # Renamed from 'actors' to avoid conflict
+        for i, model_id in enumerate(model_ids):
+            builder = actors.get_actor_builder(self.scene, id=f"ycb:{model_id}")  # Using actors module
+            builder.set_scene_idxs([i])
+            stored_actors.append(builder.build(name=f"{model_id}-{i}"))
 
-    def _load_ycb_object(self):
-        """Load a random YCB object into the scene."""
-        # create a new random seed based on current time
-        current_seed = int(time.time() * 1000.0) % (2**32 - 1)
-        rng = np.random.RandomState(current_seed)
-        
-        # select a random model ID
-        model_id = rng.choice(self.all_model_ids)
-        print(f"Loading YCB object: {model_id} (seed: {current_seed})")
-        
-        # if object already exists, only change its model
-        if hasattr(self, 'ycb_object'):
-            # move it far away temporarily (effectively hiding it)
-            self.ycb_object.set_pose(sapien.Pose(p=[1000, 1000, 1000]))
-        else:
-            # create the object for first time
-            builder = actors.get_actor_builder(self.scene, id=f"ycb:{model_id}")
-            self.ycb_object = builder.build(name=f"ycb_object")
-
+        # merge actors for efficient handling
+        self.ycb_object = Actor.merge(stored_actors, name="ycb_object")
 
     def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
         self._initialize_agent(env_idx)
@@ -109,12 +104,14 @@ class Env(BaseEnv):
     def _initialize_actor(self, env_idx: torch.Tensor):
         with torch.device(self.device):
             b = len(env_idx)
+            #print(f"Initializing {b} YCB objects")
             
             # Set initial position to middle of desired range
             # x: default position on table (0.0)
             # y: default position on table (0.5)
             # z: slightly above table surface
             ycb_xyz = torch.tensor([0.0, 0.5, self.table_height + 0.1]).repeat(b, 1)
+            #print(f"Initial positions: {ycb_xyz}")
             
             # Generate random offsets for x and y coordinates
             x_rand = np.random.uniform(-0.7, 0.7)
@@ -134,6 +131,8 @@ class Env(BaseEnv):
 
             ycb_pose = Pose.create_from_pq(p=ycb_xyz, q=orn)
             self.ycb_object.set_pose(ycb_pose)
+
+            #print(f"Final YCB poses: {self.ycb_object.pose.p}")
 
     def _initialize_agent(self, env_idx: torch.Tensor):
         with torch.device(self.device):
@@ -195,11 +194,16 @@ class Env(BaseEnv):
         return state
 
     def compute_dense_reward(self, obs: Any, action: np.ndarray, info: Dict):
-        total_reward = torch.zeros(len(obs), device=self.device)
+        batch_size = self.ycb_object.pose.p.shape[0]
+        #print(f"Batch size: {batch_size}")
+        total_reward = torch.zeros(batch_size, device=self.device)
 
         ycb_xyz = self.ycb_object.pose.p
+        #print(f"Shape of ycb_xyz: {ycb_xyz.shape}")
 
         lift_reward = ycb_xyz[:, 2] - self.table_height - 0.07
+        #print(f"Shape of lift_reward: {lift_reward.shape}")
+        #print(f"Shape of total_reward: {total_reward.shape}")
         total_reward += lift_reward * 15
 
         # get finger tip pose
@@ -263,6 +267,7 @@ class Env(BaseEnv):
     def _default_sensor_configs(self):
         pose = sapien_utils.look_at(eye=[0.5, 1.5, 2.0], 
                                     target=[0.0, 0.5, self.table_height])
+        print(f"Camera pose: {pose}")
         return [
             CameraConfig(
                 "base_camera",
@@ -282,18 +287,3 @@ class Env(BaseEnv):
         return CameraConfig(
             "render_camera", pose=pose, width=512, height=512, fov=1, near=0.01, far=100
         )
-    
-    def reconfigure(self):
-        """Reconfigure the environment by changing the YCB object."""
-        print("Starting reconfiguration...")
-        
-        # move existing obj far away and change its model
-        if hasattr(self, "ycb_object"):
-            self.ycb_object.set_pose(sapien.Pose(p=[1000, 1000, 1000]))
-        
-        self._load_ycb_object()
-        
-        # reinitialize any environment state variables
-        self.initialized = True
-        print("Reconfiguration complete")
-
