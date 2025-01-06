@@ -21,6 +21,7 @@ from mani_skill.utils import gym_utils
 from mani_skill.utils.wrappers.flatten import FlattenActionSpaceWrapper, FlattenRGBDObservationWrapper
 from mani_skill.utils.wrappers.record import RecordEpisode
 from mani_skill.vector.wrappers.gymnasium import ManiSkillVectorEnv
+from envs.ycb_env import Bimanual_Allegro
 
 @dataclass
 class Args:
@@ -52,7 +53,8 @@ class Args:
     """the environment rendering mode"""
 
     # Algorithm specific arguments
-    env_id: str = "PickCube-v1"
+    #env_id: str = "PickCube-v1"
+    env_id: str = "Bimanual_Allegro_YCB"
     """the id of the environment"""
     include_state: bool = True
     """whether to include state information in observations"""
@@ -60,17 +62,17 @@ class Args:
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 512
+    num_envs: int = 128
     """the number of parallel environments"""
-    num_eval_envs: int = 8
+    num_eval_envs: int = 4
     """the number of parallel evaluation environments"""
     partial_reset: bool = True
     """whether to let parallel environments reset upon termination instead of truncation"""
     eval_partial_reset: bool = False
     """whether to let parallel evaluation environments reset upon termination instead of truncation"""
-    num_steps: int = 50
+    num_steps: int = 100
     """the number of steps to run in each environment per policy rollout"""
-    num_eval_steps: int = 50
+    num_eval_steps: int = 100
     """the number of steps to run in each evaluation environment during evaluation"""
     reconfiguration_freq: Optional[int] = None
     """how often to reconfigure the environment during training"""
@@ -304,11 +306,28 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    env_kwargs = dict(obs_mode="rgb", render_mode=args.render_mode, sim_backend="gpu")
+    env_kwargs = dict(
+        obs_mode="rgb",
+        render_mode=args.render_mode,
+        sim_backend="gpu"
+    )
+
     if args.control_mode is not None:
         env_kwargs["control_mode"] = args.control_mode
-    eval_envs = gym.make(args.env_id, num_envs=args.num_eval_envs, reconfiguration_freq=args.eval_reconfiguration_freq, **env_kwargs)
-    envs = gym.make(args.env_id, num_envs=args.num_envs if not args.evaluate else 1, reconfiguration_freq=args.reconfiguration_freq, **env_kwargs)
+
+    eval_envs = gym.make(
+        args.env_id, 
+        num_envs=args.num_eval_envs,
+        reconfiguration_freq=args.eval_reconfiguration_freq,
+        **env_kwargs
+    )
+    envs = gym.make(
+        args.env_id, 
+        #num_envs=args.num_envs if not args.evaluate else 1,
+        num_envs=args.num_envs,
+        reconfiguration_freq=args.reconfiguration_freq,
+        **env_kwargs
+    )
 
     # rgbd obs mode returns a dict of data, we flatten it so there is just a rgbd key and state key
     envs = FlattenRGBDObservationWrapper(envs, rgb=True, depth=False, state=args.include_state)
@@ -326,6 +345,7 @@ if __name__ == "__main__":
             save_video_trigger = lambda x : (x // args.num_steps) % args.save_train_video_freq == 0
             envs = RecordEpisode(envs, output_dir=f"runs/{run_name}/train_videos", save_trajectory=False, save_video_trigger=save_video_trigger, max_steps_per_video=args.num_steps, video_fps=30)
         eval_envs = RecordEpisode(eval_envs, output_dir=eval_output_dir, save_trajectory=args.evaluate, trajectory_name="trajectory", max_steps_per_video=args.num_eval_steps, video_fps=30)
+    
     envs = ManiSkillVectorEnv(envs, args.num_envs, ignore_terminations=not args.partial_reset, record_metrics=True)
     eval_envs = ManiSkillVectorEnv(eval_envs, args.num_eval_envs, ignore_terminations=not args.eval_partial_reset, record_metrics=True)
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
@@ -385,10 +405,31 @@ if __name__ == "__main__":
 
     for iteration in range(1, args.num_iterations + 1):
         print(f"Epoch: {iteration}, global_step={global_step}")
+
+        if args.reconfiguration_freq is not None and iteration % args.reconfiguration_freq == 0:
+            print("Reconfiguring environment...")
+            try:
+                # reconfigure both training and eval environments
+                if hasattr(envs.unwrapped, 'reconfigure'):
+                    envs.unwrapped.reconfigure()
+                if args.num_eval_envs > 0 and hasattr(eval_envs.unwrapped, 'reconfigure'):
+                    eval_envs.unwrapped.reconfigure()
+                print("Environment reconfigured successfully")
+            except Exception as e:
+                print(f"Warning: Reconfiguration failed: {e}")
+
         final_values = torch.zeros((args.num_steps, args.num_envs), device=device)
         agent.eval()
         if iteration % args.eval_freq == 1:
             print("Evaluating")
+            
+            # reset and reconfigure eval environments to ensure randomization
+            eval_obs, _ = eval_envs.reset()
+            if args.num_eval_envs > 0 and args.eval_reconfiguration_freq is not None:
+                print("Reconfiguring evaluation environments...")
+                if hasattr(eval_envs.unwrapped, 'reconfigure'):
+                    eval_envs.unwrapped.reconfigure()
+
             eval_obs, _ = eval_envs.reset()
             eval_metrics = defaultdict(list)
             num_episodes = 0
