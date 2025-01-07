@@ -161,8 +161,8 @@ class Bimanual_Allegro(BaseAgent):
             CameraConfig(
                 uid="hand_camera",
                 pose=hand_view_l,
-                width=128,
-                height=128,
+                width=64,
+                height=64,
                 fov=np.pi / 2,
                 near=0.01,
                 far=100,
@@ -171,8 +171,8 @@ class Bimanual_Allegro(BaseAgent):
             CameraConfig(
                 uid="hand_camera_r",
                 pose=hand_view_r,
-                width=128,
-                height=128,
+                width=64,
+                height=64,
                 fov=np.pi / 2,
                 near=0.01,
                 far=100,
@@ -181,8 +181,8 @@ class Bimanual_Allegro(BaseAgent):
             CameraConfig(
                 uid="back_camera",
                 pose=back_view,
-                width=128,
-                height=128,
+                width=64,
+                height=64,
                 fov=np.pi / 2,
                 near=0.01,
                 far=100,
