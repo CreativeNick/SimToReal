@@ -62,7 +62,7 @@ class Args:
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 128
+    num_envs: int = 64
     """the number of parallel environments"""
     num_eval_envs: int = 4
     """the number of parallel evaluation environments"""
@@ -314,6 +314,10 @@ if __name__ == "__main__":
 
     if args.control_mode is not None:
         env_kwargs["control_mode"] = args.control_mode
+
+    if args.reconfiguration_freq is not None:
+        args.partial_reset = False
+        args.eval_partial_reset = False
 
     eval_envs = gym.make(
         args.env_id, 
