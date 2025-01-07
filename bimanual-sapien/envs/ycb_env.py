@@ -26,14 +26,29 @@ class Env(BaseEnv):
     agent: Union[Bimanual_Allegro]
 
     def __init__(
-        self, *args, robot_uids="Bimanual_Allegro", robot_init_qpos_noise=0.02, **kwargs
+        self, *args,
+        robot_uids="Bimanual_Allegro",
+        robot_init_qpos_noise=0.02,
+        **kwargs
     ):
-        # load all YCB model IDs before initializion
-        self.all_model_ids = np.array(
-            list(
-                load_json(ASSET_DIR / "assets/mani_skill2_ycb/info_pick_v0.json").keys()
-            )
+        # # load all YCB model IDs before initializion
+        # self.all_model_ids = np.array(
+        #     list(
+        #         load_json(ASSET_DIR / "assets/mani_skill2_ycb/info_pick_v0.json").keys()
+        #     )
+        # )
+
+        all_possible_models = list(
+            load_json(ASSET_DIR / "assets/mani_skill2_ycb/info_pick_v0.json").keys()
         )
+
+        print(f"Total available YCB objects: {len(all_possible_models)}")
+
+        self.all_model_ids = np.array(all_possible_models[:10])
+        print(f"Using {len(self.all_model_ids)} YCB objects:")
+        for i, model_id in enumerate(self.all_model_ids):
+            print(f"{i+1}. {model_id}")
+
 
         self.robot_init_qpos_noise = robot_init_qpos_noise
         self.table_height = 1.1
@@ -272,8 +287,8 @@ class Env(BaseEnv):
             CameraConfig(
                 "base_camera",
                 pose=pose,
-                width=128,
-                height=128,
+                width=64,
+                height=64,
                 fov=np.pi / 2,
                 near=0.01,
                 far=100,
