@@ -58,7 +58,7 @@ class Args:
     """the id of the environment"""
     include_state: bool = True
     """whether to include state information in observations"""
-    total_timesteps: int = 10000000
+    total_timesteps: int = 20000000
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
@@ -70,13 +70,13 @@ class Args:
     """whether to let parallel environments reset upon termination instead of truncation"""
     eval_partial_reset: bool = False
     """whether to let parallel evaluation environments reset upon termination instead of truncation"""
-    num_steps: int = 100
+    num_steps: int = 200
     """the number of steps to run in each environment per policy rollout"""
     num_eval_steps: int = 100
     """the number of steps to run in each evaluation environment during evaluation"""
     reconfiguration_freq: Optional[int] = None
     """how often to reconfigure the environment during training"""
-    eval_reconfiguration_freq: Optional[int] = 1
+    eval_reconfiguration_freq: Optional[int] = None
     """for benchmarking purposes we want to reconfigure the eval environment each reset to ensure objects are randomized in some tasks"""
     control_mode: Optional[str] = "pd_joint_delta_pos"
     """the control mode to use for the environment"""
@@ -86,9 +86,9 @@ class Args:
     """the discount factor gamma"""
     gae_lambda: float = 0.9
     """the lambda for the general advantage estimation"""
-    num_minibatches: int = 32
+    num_minibatches: int = 8
     """the number of mini-batches"""
-    update_epochs: int = 4
+    update_epochs: int = 8
     """the K epochs to update the policy"""
     norm_adv: bool = True
     """Toggles advantages normalization"""
@@ -340,6 +340,8 @@ if __name__ == "__main__":
         **env_kwargs
     )
 
+    print(f"Using environment: {args.env_id}") # debug statement
+
     # rgbd obs mode returns a dict of data, we flatten it so there is just a rgbd key and state key
     envs = FlattenRGBDObservationWrapper(envs,
                                          rgb=True,
@@ -364,15 +366,19 @@ if __name__ == "__main__":
             envs = RecordEpisode(envs, output_dir=f"runs/{run_name}/train_videos", save_trajectory=False, save_video_trigger=save_video_trigger, max_steps_per_video=args.num_steps, video_fps=30)
         eval_envs = RecordEpisode(eval_envs, output_dir=eval_output_dir, save_trajectory=args.evaluate, trajectory_name="trajectory", max_steps_per_video=args.num_eval_steps, video_fps=30)
     
-    envs = ManiSkillVectorEnv(envs,
-                              args.num_envs,
-                              ignore_terminations=not args.partial_reset,
-                              record_metrics=True)
+    envs = ManiSkillVectorEnv(
+        envs,
+        args.num_envs,
+        ignore_terminations=not args.partial_reset,
+        record_metrics=True,
+    )
     
-    eval_envs = ManiSkillVectorEnv(eval_envs,
-                                   args.num_eval_envs,
-                                   ignore_terminations=not args.eval_partial_reset,
-                                   record_metrics=True)
+    eval_envs = ManiSkillVectorEnv(
+        eval_envs,
+        args.num_eval_envs,
+        ignore_terminations=not args.eval_partial_reset,
+        record_metrics=True,
+    )
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
     max_episode_steps = gym_utils.find_max_episode_steps_value(envs._env)
