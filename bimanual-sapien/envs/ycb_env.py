@@ -237,24 +237,38 @@ class Env(BaseEnv):
 
     def compute_dense_reward(self, obs: Any, action: np.ndarray, info: Dict):
         batch_size = self.ycb_object.pose.p.shape[0]
-        #print(f"Batch size: {batch_size}")
         total_reward = torch.zeros(batch_size, device=self.device)
 
         ycb_xyz = self.ycb_object.pose.p
-        #print(f"Shape of ycb_xyz: {ycb_xyz.shape}")
 
-        # step 1: approach reward
-        # compute the center of the right-hand tip links
+        # step 1: horizontal and vertical  alignment reward
+        # horizontal alignment
+        # compute the center of the right-hand tip links for hand alignment
         right_hand_tip_positions = torch.cat(
-            [link.pose.p.unsqueeze(1) for link in self.right_hand_tip_link], dim=1
+            [link.pose.p.unsqueeze(1) for link in self.right_hand_tip_link],
+            dim=1
         )  # shape: (batch_size, num_tips, 3)
         hand_center = right_hand_tip_positions.mean(dim=1)  # (batch_size, 3)
+        # compute horizontal (x-y plane) distance between hand center and object
+        horizontal_distance = torch.linalg.norm(hand_center[:, :2] - ycb_xyz[:, :2], dim=1)
+        horizontal_alignment_reward = torch.exp(-3.0 * horizontal_distance)
+        total_reward += horizontal_alignment_reward * 3.0
+
+        # vertical alignment
+        desired_vertical_offset = 0.1
+        # calculate distance between the hand center and the object
+        vertical_offset = hand_center[:, 2] - ycb_xyz[:, 2]
+        vertical_error = torch.abs(vertical_offset - desired_vertical_offset)
+        vertical_alignment_reward = torch.exp(-5.0 * vertical_error)
+        total_reward += vertical_alignment_reward * 3.0
+
+        # step 2: approach reward
+        # (Reusing the already computed hand_center)
         approach_distance = torch.linalg.norm(hand_center - ycb_xyz, dim=-1)
         approach_reward = torch.exp(-2.0 * approach_distance)
         total_reward += approach_reward * 2.0
 
-        # step 2: grasp reward
-        # reward based on fingertips being close to the object
+        # step 3: grasp reward
         finger_tip_distances = torch.linalg.norm(
             right_hand_tip_positions - ycb_xyz.unsqueeze(1), dim=-1
         )  # (batch_size, num_tips)
@@ -263,14 +277,13 @@ class Env(BaseEnv):
         finger_positions = torch.stack([link.pose.p for link in self.right_hand_link], dim=1)
         finger_spread = torch.std(finger_positions, dim=1).mean(dim=-1)
 
-        desired_spread = 0.05 # in meters, *100 for cm
+        desired_spread = 0.05  # in meters; adjust as needed
         spread_error = torch.abs(finger_spread - desired_spread)
-
         optimal_spread_reward = torch.exp(-10.0 * spread_error)
         grasp_reward = grasp_proximity_reward * optimal_spread_reward
         total_reward += grasp_reward * 1.0
 
-        # step 3: lift reward
+        # step 4: lift reward
         lift_baseline = self.table_height + 0.1
         lift_reward = torch.clamp(ycb_xyz[:, 2] - lift_baseline, min=0.0)
         total_reward += lift_reward * 15.0
@@ -282,27 +295,22 @@ class Env(BaseEnv):
         )
         total_reward += high_lift_reward
 
-        # step 4: orientation reward
-        # self.right_hand_link[0] corresponds to the palm
-        # reward the agent when the palm is flat and facing downwards ([0, 0, -1]) towards the object
-        
+        # step 5: orientation reward
+        # self.right_hand_link[0] corresponds to the palm.
+        # Reward the agent when the palm is flat and facing downward ([0, 0, -1])
         palm_q = self.right_hand_link[0].pose.q  # get the quaternion from pose
-        #print("PALM Q: ", palm_q)
-        palm_R = self.quat_to_rot(palm_q) # convert to rotation matrix
-
+        palm_R = self.quat_to_rot(palm_q)         # convert to rotation matrix
         local_palm_normal = torch.tensor([0, 0, -1], device=self.device, dtype=torch.float32)
-        local_palm_normal_expanded = local_palm_normal.unsqueeze(0).expand(batch_size, -1).unsqueeze(-1)  # shape: (batch_size, 3, 1)
-        palm_normal = torch.matmul(palm_R, local_palm_normal_expanded).squeeze(-1)  # shape: (batch_size, 3)
+        local_palm_normal_expanded = local_palm_normal.unsqueeze(0).expand(batch_size, -1).unsqueeze(-1)  # (batch_size, 3, 1)
+        palm_normal = torch.matmul(palm_R, local_palm_normal_expanded).squeeze(-1)  # (batch_size, 3)
         desired_direction = torch.tensor([0, 0, -1], device=self.device, dtype=torch.float32)
-        orientation_dot = torch.sum(palm_normal * desired_direction, dim=1)  # shape: (batch_size,)
+        orientation_dot = torch.sum(palm_normal * desired_direction, dim=1)  # (batch_size,)
         orientation_reward = torch.clamp(orientation_dot, 0.0, 1.0)
         total_reward += orientation_reward * 1.0
 
         # left-arm movement penalty
         if hasattr(self, "initial_left_hand_positions"):
-            left_hand_positions = torch.stack(
-                [link.pose.p for link in self.left_hand_link], dim=1
-            )
+            left_hand_positions = torch.stack([link.pose.p for link in self.left_hand_link], dim=1)
             left_movement = torch.linalg.norm(
                 left_hand_positions - self.initial_left_hand_positions, dim=-1
             ).mean(dim=-1)
@@ -313,6 +321,7 @@ class Env(BaseEnv):
         total_reward[info["fail"]] = -self.max_reward / 4
 
         return total_reward
+
     
     # def compute_dense_reward(self, obs: Any, action: np.ndarray, info: Dict):
     #     batch_size = self.ycb_object.pose.p.shape[0]
