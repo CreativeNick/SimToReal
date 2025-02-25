@@ -58,7 +58,7 @@ class Args:
     """the id of the environment"""
     include_state: bool = True
     """whether to include state information in observations"""
-    total_timesteps: int = 20000000
+    total_timesteps: int = 10000000
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
@@ -70,7 +70,7 @@ class Args:
     """whether to let parallel environments reset upon termination instead of truncation"""
     eval_partial_reset: bool = False
     """whether to let parallel evaluation environments reset upon termination instead of truncation"""
-    num_steps: int = 200
+    num_steps: int = 100
     """the number of steps to run in each environment per policy rollout"""
     num_eval_steps: int = 100
     """the number of steps to run in each evaluation environment during evaluation"""
@@ -106,7 +106,7 @@ class Args:
     """the target KL divergence threshold"""
     reward_scale: float = 1.0
     """Scale the reward by this factor"""
-    eval_freq: int = 25
+    eval_freq: int = 20
     """evaluation frequency in terms of iterations"""
     save_train_video_freq: Optional[int] = None
     """frequency to save training videos in terms of iterations"""
@@ -216,7 +216,8 @@ class NatureCNN(nn.Module):
 
             # RGBD dimension calculation
             with torch.no_grad():
-                n_flatten = cnn(sample_obs["rgbd"].float().permute(0,3,1,2).cpu()).shape[1]
+                n_flatten = cnn(
+                    sample_obs["rgbd"].float().permute(0, 3, 1, 2).cpu()).shape[1]
                 fc = nn.Sequential(nn.Linear(n_flatten, feature_size), nn.ReLU())
             extractors["rgbd"] = nn.Sequential(cnn, fc)
             self.out_features += feature_size
@@ -232,13 +233,27 @@ class NatureCNN(nn.Module):
 
     def forward(self, observations) -> torch.Tensor:
         encoded_tensor_list = []
-        # self.extractors contain nn.Modules that do all the processing.
         for key, extractor in self.extractors.items():
             obs = observations[key]
             if key == "rgbd":
-                obs = obs.float().permute(0,3,1,2)
-                obs = obs / 255.0  # normalize values
+                # convert to float and rearrange to [B, C, H, W]
+                obs = obs.float().permute(0, 3, 1, 2)
+                C = obs.shape[1]
+                if C == 4:
+                    # channels 0-2 are RGB, channel 3 is depth
+                    rgb = obs[:, :3, :, :] / 255.0
+                    depth = obs[:, 3:, :, :] / 1000.0
+                    obs = torch.cat([rgb, depth], dim=1)
+                else:
+                    # for stacked frames, assume each frame has 4 channels (3 RGB, 1 depth)
+                    num_frames = C // 4
+                    rgb_channels = 3 * num_frames
+                    rgb = obs[:, :rgb_channels, :, :] / 255.0
+                    depth = obs[:, rgb_channels:, :, :] / 1000.0
+                    obs = torch.cat([rgb, depth], dim=1)
+
             encoded_tensor_list.append(extractor(obs))
+
         return torch.cat(encoded_tensor_list, dim=1)
 
 class Agent(nn.Module):
@@ -342,15 +357,21 @@ if __name__ == "__main__":
 
     print(f"Using environment: {args.env_id}") # debug statement
 
+    # after creating envs and eval_envs:
+    from remove_left_arm_obs import RemoveLeftArmObservationWrapper
+    envs = RemoveLeftArmObservationWrapper(envs)
+    eval_envs = RemoveLeftArmObservationWrapper(eval_envs)
+
+
     # rgbd obs mode returns a dict of data, we flatten it so there is just a rgbd key and state key
     envs = FlattenRGBDObservationWrapper(envs,
                                          rgb=True,
-                                         depth=True,
+                                         depth=False,
                                          state=True)
     
     eval_envs = FlattenRGBDObservationWrapper(eval_envs,
                                               rgb=True,
-                                              depth=True,
+                                              depth=False,
                                               state=True)
 
     if isinstance(envs.action_space, gym.spaces.Dict):
@@ -498,6 +519,8 @@ if __name__ == "__main__":
             with torch.no_grad():
                 action, logprob, _, value = agent.get_action_and_value(next_obs)
                 values[step] = value.flatten()
+                #action[:, 0::2] = 0.0 # disable left arm
+                
             actions[step] = action
             logprobs[step] = logprob
 

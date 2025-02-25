@@ -11,9 +11,9 @@ import torch
 # 828
 left_arm_init_qpos = np.array(
     [
-        -4.6746,
-        -0.6805,
-        1.5093,
+        -5.315, # -4.6746,
+        -1.277, # -0.6805,
+        1.772, # 1.5093,
         -2.3778,
         -0.8824,
         -0.0632,
@@ -73,12 +73,19 @@ class Bimanual_Allegro(BaseAgent):
         "wrist_2_joint",
         "wrist_3_joint",
     ]
+    #hand_joint_names = ["joint_{}.0_r".format(i) for i in range(16)]
+
     right_arm_joint_names = [joint + "_r" for joint in left_arm_joint_names]
     arm_joint_names = left_arm_joint_names + right_arm_joint_names
 
     left_hand_joint_names = ["joint_{}.0".format(i) for i in range(16)]
     right_hand_joint_names = ["joint_{}.0_r".format(i) for i in range(16)]
     hand_joint_names = left_hand_joint_names + right_hand_joint_names
+
+    # initialize left arm in fixed position but only control right
+    arm_qpos = np.zeros(12)
+    arm_qpos[::2] = left_arm_init_qpos   # left arm fixed away from workspace
+    arm_qpos[1::2] = right_arm_init_qpos # right arm controllable
 
     arm_stiffness = 1e3
     arm_damping = 1e2
@@ -92,9 +99,35 @@ class Bimanual_Allegro(BaseAgent):
 
     @property
     def _controller_configs(self):
+
+        # print("Total joints being controlled: ", len(self.arm_joint_names) + len(self.hand_joint_names))
+        # print("Arm joints: ", self.arm_joint_names)  # Should only be right arm joints
+        # print("Hand joints: ", self.hand_joint_names)  # Should only be right hand joints
+        #print("Full joint count: ", len(self.arm_joint_names + self.hand_joint_names))
+        #print("Right-only joint count: ", len(self.right_arm_joint_names + self.right_hand_joint_names))
+        
+        left_lower = [0.0] * len(self.left_arm_joint_names)
+        left_upper = [0.0] * len(self.left_arm_joint_names)
+        right_lower = [-0.1] * len(self.right_arm_joint_names)
+        right_upper = [0.1] * len(self.right_arm_joint_names)
+        arm_lower = left_lower + right_lower
+        arm_upper = left_upper + right_upper
+
+        # set up controllers to only affect right arm/hand
+        arm_pd_joint_delta_pos = PDJointPosControllerConfig(
+            self.arm_joint_names,  # Both arms
+            lower=arm_lower,  # Left 0, right normal range
+            upper=arm_upper,   # Left 0, right normal range
+            stiffness=self.arm_stiffness,  # Normal stiffness
+            damping=self.arm_damping,      # Normal damping
+            force_limit=self.arm_force_limit,
+            use_delta=True,
+            friction=self.arm_friction,
+        )
+
         arm_pd_joint_pos = PDJointPosControllerConfig(
             self.arm_joint_names,
-            lower=None,
+            lower=None, 
             upper=None,
             stiffness=self.arm_stiffness,
             damping=self.arm_damping,
@@ -102,16 +135,26 @@ class Bimanual_Allegro(BaseAgent):
             normalize_action=False,
             friction=self.arm_friction,
         )
-        arm_pd_joint_delta_pos = PDJointPosControllerConfig(
-            self.arm_joint_names,
-            lower=-0.1,
-            upper=0.1,
-            stiffness=self.arm_stiffness,
-            damping=self.arm_damping,
-            force_limit=self.arm_force_limit,
+
+
+        left_hand_lower = [0.0] * len(self.left_hand_joint_names)
+        left_hand_upper = [0.0] * len(self.left_hand_joint_names)
+        right_hand_lower = [-0.1] * len(self.right_hand_joint_names)
+        right_hand_upper = [0.1] * len(self.right_hand_joint_names)
+        hand_lower = left_hand_lower + right_hand_lower
+        hand_upper = left_hand_upper + right_hand_upper
+        
+        hand_pd_joint_delta_pos = PDJointPosControllerConfig(
+            self.hand_joint_names,  # both hands
+            lower=hand_lower,  # left 0, right normal range
+            upper=hand_upper,   # left 0, right normal range  
+            stiffness=self.hand_stiffness,
+            damping=self.hand_damping,
+            force_limit=self.hand_force_limit,
             use_delta=True,
-            friction=self.arm_friction,
+            friction=self.hand_friction,
         )
+
         hand_pd_joint_pos = PDJointPosControllerConfig(
             self.hand_joint_names,
             lower=None,
@@ -123,24 +166,16 @@ class Bimanual_Allegro(BaseAgent):
             friction=self.hand_friction,
         )
 
-        hand_pd_joint_delta_pos = PDJointPosControllerConfig(
-            self.hand_joint_names,
-            lower=-0.1,
-            upper=0.1,
-            stiffness=self.hand_stiffness,
-            damping=self.hand_damping,
-            force_limit=self.hand_force_limit,
-            use_delta=True,
-            friction=self.hand_friction,
-        )
-
         controller_configs = dict(
             pd_joint_delta_pos=dict(
-                arm=arm_pd_joint_delta_pos, hand=hand_pd_joint_delta_pos
+                arm=arm_pd_joint_delta_pos,
+                hand=hand_pd_joint_delta_pos
             ),
-            pd_joint_pos=dict(arm=arm_pd_joint_pos, hand=hand_pd_joint_pos),
+            pd_joint_pos=dict(
+                arm=arm_pd_joint_pos,
+                hand=hand_pd_joint_pos
+            )
         )
-        # Make a deepcopy in case users modify any config
         return deepcopy_dict(controller_configs)
 
     @property
@@ -161,8 +196,8 @@ class Bimanual_Allegro(BaseAgent):
             CameraConfig(
                 uid="hand_camera",
                 pose=hand_view_l,
-                width=64,
-                height=64,
+                width=128,
+                height=128,
                 fov=np.pi / 2,
                 near=0.01,
                 far=100,
@@ -171,8 +206,8 @@ class Bimanual_Allegro(BaseAgent):
             CameraConfig(
                 uid="hand_camera_r",
                 pose=hand_view_r,
-                width=64,
-                height=64,
+                width=128,
+                height=128,
                 fov=np.pi / 2,
                 near=0.01,
                 far=100,
@@ -181,8 +216,8 @@ class Bimanual_Allegro(BaseAgent):
             CameraConfig(
                 uid="back_camera",
                 pose=back_view,
-                width=64,
-                height=64,
+                width=128,
+                height=128,
                 fov=np.pi / 2,
                 near=0.01,
                 far=100,
