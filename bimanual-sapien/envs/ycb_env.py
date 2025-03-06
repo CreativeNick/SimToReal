@@ -102,6 +102,21 @@ class Env(BaseEnv):
         )
         self.table = table_builder.build_static(name="table")
 
+        # Create a goal marker (green ball, visual-only no collision)
+        goal_builder = self.scene.create_actor_builder()
+        goal_builder.add_sphere_visual(
+            radius=0.025,
+            pose=sapien.Pose(p=[0, 0.5, self.table_height + 0.45]),
+            material=sapien.render.RenderMaterial(
+                base_color=[0, 1, 0, 0.5]
+            )
+        )
+        self.goal_marker = goal_builder.build_static(name="goal_marker")
+        
+        # store goal position for reward calculation
+        self.goal_position = torch.tensor([0, 0.5, self.table_height + 0.45], 
+                                        device=self.device).repeat(self.num_envs, 1)
+
         # sample YCB objects for each parallel environment
         model_ids = self._batched_episode_rng.choice(self.all_model_ids)
         
@@ -222,7 +237,7 @@ class Env(BaseEnv):
             fail = torch.zeros_like(self.ycb_object.pose.p[:, 0], dtype=torch.bool)
             
         # create success condition
-        success = self.ycb_object.pose.p[:, 2] >= 1.25
+        success = self.ycb_object.pose.p[:, 2] >= self.table_height + 0.45
         
         # calculate reward directly here instead of calling compute_dense_reward
         reward = torch.zeros_like(self.ycb_object.pose.p[:, 0], device=self.device)
@@ -269,7 +284,12 @@ class Env(BaseEnv):
         # Initial lift (0-5cm): basic reward to get robot started
         # Mid lift (5-10cm): increased reward to encourage lifting higher
         # High lift (10-15cm): highest reward as robot is close to goal
-        
+
+        # proximity to goal position (15cm above table)
+        goal_distance = torch.linalg.norm(ycb_xyz - self.goal_position, dim=-1)
+        goal_proximity_reward = torch.exp(-5.0 * goal_distance)
+        total_reward += goal_proximity_reward * 2.0 # may adjust
+            
         # Track if lifting has occurred (for printing)
         if not hasattr(self, "lift_detected"):
             self.lift_detected = torch.zeros(batch_size, dtype=torch.bool, device=self.device)
@@ -286,29 +306,29 @@ class Env(BaseEnv):
         base_lift_reward = torch.clamp(height_above_table * 5.0, min=0.0)
         total_reward += base_lift_reward
         
-        # Mid lift reward level (5cm)
-        mid_threshold = 0.05
+        # Mid lift reward level (1/3 way to goal)
+        mid_threshold = 0.15
         mid_lift_bonus = torch.where(
             height_above_table > mid_threshold,
-            torch.ones_like(height_above_table) * 1.0,  # small bonus reward
+            torch.ones_like(height_above_table) * 1.0,  # small bonus
             torch.zeros_like(height_above_table)
         )
         total_reward += mid_lift_bonus
         
-        # High lift reward level (10cm)
-        high_threshold = 0.10
+        # High lift reward level (2/3 way to goal)
+        high_threshold = 0.30
         high_lift_bonus = torch.where(
             height_above_table > high_threshold,
-            torch.ones_like(height_above_table) * 2.0,  # mid bonus reward
+            torch.ones_like(height_above_table) * 2.0,  # middle bonus
             torch.zeros_like(height_above_table)
         )
         total_reward += high_lift_bonus
         
-        # Success threshold (approaching 15cm)
-        goal_threshold = 0.145  # 14.5 cm
+        # Success threshold (approaching 45cm)
+        goal_threshold = 0.40
         goal_approach_bonus = torch.where(
             height_above_table > goal_threshold,
-            torch.ones_like(height_above_table) * 5.0, # large bonus reward
+            torch.ones_like(height_above_table) * 5.0,  # large bonus
             torch.zeros_like(height_above_table)
         )
         total_reward += goal_approach_bonus
