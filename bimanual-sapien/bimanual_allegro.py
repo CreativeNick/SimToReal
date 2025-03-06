@@ -44,6 +44,28 @@ class Bimanual_Allegro(BaseAgent):
     #srdf_path = "assets/urdf/ur5e_allegro/robots/dual_ur5e_allegro_inertia_changed.srdf" #for reference, srdf_path does not need to be set (may not actually even be used)
     fix_root_link = True
     disable_self_collisions = False # Set to True to disable self-collision
+
+    # Increase the friction of the fingertips (for right arm, will update for left arm later)
+    urdf_config = dict(
+        _materials=dict(
+            high_friction=dict(static_friction=2.0, dynamic_friction=2.0, restitution=0.1)
+        ),
+        link=dict(
+            link_3_0_tip_r=dict(
+                material="high_friction", patch_radius=0.1, min_patch_radius=0.1
+            ),
+            link_7_0_tip_r=dict(
+                material="high_friction", patch_radius=0.1, min_patch_radius=0.1
+            ),
+            link_11_0_tip_r=dict(
+                material="high_friction", patch_radius=0.1, min_patch_radius=0.1
+            ),
+            link_15_0_tip_r=dict(
+                material="high_friction", patch_radius=0.1, min_patch_radius=0.1
+            ),
+        ),
+    )
+
     arm_qpos = np.zeros(12)
     arm_qpos[::2] = left_arm_init_qpos
     arm_qpos[1::2] = right_arm_init_qpos

@@ -44,7 +44,9 @@ class Env(BaseEnv):
 
         print(f"Total available YCB objects: {len(all_possible_models)}")
 
-        self.all_model_ids = np.array(all_possible_models[2:3])
+        # select subset of YCB objects
+        self.all_model_ids = np.array(all_possible_models[0:1])
+
         print(f"Using {len(self.all_model_ids)} YCB objects:")
         for i, model_id in enumerate(self.all_model_ids):
             print(f"{i+1}. {model_id}")
@@ -96,16 +98,16 @@ class Env(BaseEnv):
         table_builder.add_box_collision(
             pose=sapien.Pose(p=[0, 0.5, self.table_height]),
         	half_size=[0.7, 0.5, 0.02],
-            material=sapien.physx.PhysxMaterial(0.5, 0.3, 0.6),
+            material=sapien.physx.PhysxMaterial(1.4, 0.3, 0.1),
         )
         self.table = table_builder.build_static(name="table")
 
         # sample YCB objects for each parallel environment
         model_ids = self._batched_episode_rng.choice(self.all_model_ids)
         
-        stored_actors = []  # Renamed from 'actors' to avoid conflict
+        stored_actors = []
         for i, model_id in enumerate(model_ids):
-            builder = actors.get_actor_builder(self.scene, id=f"ycb:{model_id}")  # Using actors module
+            builder = actors.get_actor_builder(self.scene, id=f"ycb:{model_id}")
             builder.set_scene_idxs([i])
             stored_actors.append(builder.build(name=f"{model_id}-{i}"))
 
@@ -125,12 +127,12 @@ class Env(BaseEnv):
             # x: default position on table (0.0)
             # y: default position on table (0.5)
             # z: slightly above table surface
-            ycb_xyz = torch.tensor([0.0, 0.5, self.table_height + 0.1]).repeat(b, 1)
+            ycb_xyz = torch.tensor([0.0, 0.5, self.table_height + 0.05]).repeat(b, 1)
             #print(f"Initial positions: {ycb_xyz}")
             
             # Generate random offsets for x and y coordinates
-            x_rand = np.random.uniform(-0.7, 0.7)
-            y_rand = np.random.uniform(-0.4, 0.25)
+            x_rand = -0.2 #np.random.uniform(-0.5, 0.5)
+            y_rand = 0.25 # np.random.uniform(-0.2, 0.25)
 
             # Adjust multipliers to match desired range
             # x: random range of -0.7 to 0.7 based on x_rand
@@ -141,8 +143,24 @@ class Env(BaseEnv):
             # Set z to table height + 0.1 to avoid clipping through the table
             ycb_xyz[:, 2] = self.table_height + 0.1
 
-            # Generate random orientations for the YCB object
-            orn = random_quaternions(b, device=self.device)
+            # # Generate random orientations for the YCB object
+            # orn = random_quaternions(b, device=self.device)
+
+            # Create upright orientation with only rotation around vertical axis
+            # This keeps cylinders standing up rather than on their sides
+            
+            # Start with identity quaternion (w=1, x=y=z=0) - upright orientation
+            orn = torch.zeros((b, 4), device=self.device)
+            orn[:, 0] = 1.0  # w component = 1 (identity rotation)
+            
+            # Apply random rotation only around z-axis (vertical axis)
+            # This will keep objects upright but with random facing direction
+            angle = torch.rand(b, device=self.device) * (2 * np.pi)  # Random angle 0-2π
+            
+            # Convert angle to quaternion representing rotation around z-axis
+            # Format: [w, x, y, z]
+            orn[:, 0] = torch.cos(angle / 2)  # w component
+            orn[:, 3] = torch.sin(angle / 2)  # z component (rotation around z-axis)
 
             ycb_pose = Pose.create_from_pq(p=ycb_xyz, q=orn)
             self.ycb_object.set_pose(ycb_pose)
@@ -218,180 +236,99 @@ class Env(BaseEnv):
         }
         return state
 
-    def quat_to_rot(self, q):
-        # q is a tensor of shape (..., 4) in the format [w, x, y, z]
-        w, x, y, z = q.unbind(-1)
-        R00 = 1 - 2*(y**2 + z**2)
-        R01 = 2*(x*y - z*w)
-        R02 = 2*(x*z + y*w)
-        R10 = 2*(x*y + z*w)
-        R11 = 1 - 2*(x**2 + z**2)
-        R12 = 2*(y*z - x*w)
-        R20 = 2*(x*z - y*w)
-        R21 = 2*(y*z + x*w)
-        R22 = 1 - 2*(x**2 + y**2)
-        R = torch.stack([torch.stack([R00, R01, R02], dim=-1),
-                        torch.stack([R10, R11, R12], dim=-1),
-                        torch.stack([R20, R21, R22], dim=-1)], dim=-2)
-        return R
-
     def compute_dense_reward(self, obs: Any, action: np.ndarray, info: Dict):
         batch_size = self.ycb_object.pose.p.shape[0]
         total_reward = torch.zeros(batch_size, device=self.device)
-
+        
+        # Get object position
         ycb_xyz = self.ycb_object.pose.p
-
-        # step 1: horizontal and vertical  alignment reward
-        # horizontal alignment
-        # compute the center of the right-hand tip links for hand alignment
+        
+        # Get fingertip positions
         right_hand_tip_positions = torch.cat(
             [link.pose.p.unsqueeze(1) for link in self.right_hand_tip_link],
             dim=1
-        )  # shape: (batch_size, num_tips, 3)
-        hand_center = right_hand_tip_positions.mean(dim=1)  # (batch_size, 3)
-        # compute horizontal (x-y plane) distance between hand center and object
-        horizontal_distance = torch.linalg.norm(hand_center[:, :2] - ycb_xyz[:, :2], dim=1)
-        horizontal_alignment_reward = torch.exp(-3.0 * horizontal_distance)
-        total_reward += horizontal_alignment_reward * 3.0
-
-        # vertical alignment
-        desired_vertical_offset = 0.1
-        # calculate distance between the hand center and the object
-        vertical_offset = hand_center[:, 2] - ycb_xyz[:, 2]
-        vertical_error = torch.abs(vertical_offset - desired_vertical_offset)
-        vertical_alignment_reward = torch.exp(-5.0 * vertical_error)
-        total_reward += vertical_alignment_reward * 3.0
-
-        # step 2: approach reward
-        # (Reusing the already computed hand_center)
-        approach_distance = torch.linalg.norm(hand_center - ycb_xyz, dim=-1)
-        approach_reward = torch.exp(-2.0 * approach_distance)
-        total_reward += approach_reward * 2.0
-
-        # step 3: grasp reward
-        finger_tip_distances = torch.linalg.norm(
-            right_hand_tip_positions - ycb_xyz.unsqueeze(1), dim=-1
-        )  # (batch_size, num_tips)
-        grasp_proximity_reward = torch.exp(-5.0 * finger_tip_distances).mean(dim=1)
-        # reward for a closed hand
-        finger_positions = torch.stack([link.pose.p for link in self.right_hand_link], dim=1)
-        finger_spread = torch.std(finger_positions, dim=1).mean(dim=-1)
-
-        desired_spread = 0.05  # in meters; adjust as needed
-        spread_error = torch.abs(finger_spread - desired_spread)
-        optimal_spread_reward = torch.exp(-10.0 * spread_error)
-        grasp_reward = grasp_proximity_reward * optimal_spread_reward
-        total_reward += grasp_reward * 1.0
-
-        # step 4: lift reward
-        lift_baseline = self.table_height + 0.1
-        lift_reward = torch.clamp(ycb_xyz[:, 2] - lift_baseline, min=0.0)
-        total_reward += lift_reward * 15.0
-        high_lift_threshold = self.table_height + 0.2
-        high_lift_reward = torch.where(
-            ycb_xyz[:, 2] > high_lift_threshold,
-            (ycb_xyz[:, 2] - high_lift_threshold) * 25.0,
-            torch.zeros_like(ycb_xyz[:, 2])
         )
-        total_reward += high_lift_reward
-
-        # step 5: orientation reward
-        # self.right_hand_link[0] corresponds to the palm.
-        # Reward the agent when the palm is flat and facing downward ([0, 0, -1])
-        palm_q = self.right_hand_link[0].pose.q  # get the quaternion from pose
-        palm_R = self.quat_to_rot(palm_q)         # convert to rotation matrix
-        local_palm_normal = torch.tensor([0, 0, -1], device=self.device, dtype=torch.float32)
-        local_palm_normal_expanded = local_palm_normal.unsqueeze(0).expand(batch_size, -1).unsqueeze(-1)  # (batch_size, 3, 1)
-        palm_normal = torch.matmul(palm_R, local_palm_normal_expanded).squeeze(-1)  # (batch_size, 3)
-        desired_direction = torch.tensor([0, 0, -1], device=self.device, dtype=torch.float32)
-        orientation_dot = torch.sum(palm_normal * desired_direction, dim=1)  # (batch_size,)
-        orientation_reward = torch.clamp(orientation_dot, 0.0, 1.0)
-        total_reward += orientation_reward * 1.0
-
-        # left-arm movement penalty
-        if hasattr(self, "initial_left_hand_positions"):
-            left_hand_positions = torch.stack([link.pose.p for link in self.left_hand_link], dim=1)
-            left_movement = torch.linalg.norm(
-                left_hand_positions - self.initial_left_hand_positions, dim=-1
-            ).mean(dim=-1)
-            total_reward += (-left_movement * 100.0)
-
-        total_reward = total_reward.clamp(-self.max_reward, self.max_reward)
+        hand_center = right_hand_tip_positions.mean(dim=1)
+        
+        # 1. Approach reward (hand moves close to object)
+        distance = torch.linalg.norm(hand_center - ycb_xyz, dim=-1)
+        approach_reward = torch.exp(-5.0 * distance)
+        total_reward += approach_reward * 1.0
+        
+        # 2. Grasp formation reward
+        fingertip_distances = torch.linalg.norm(
+            right_hand_tip_positions - ycb_xyz.unsqueeze(1), dim=-1
+        )
+        grasp_reward = torch.exp(-10.0 * fingertip_distances.mean(dim=1))
+        total_reward += grasp_reward * 2.0
+        
+        # 3. Lifting reward (progression towards goal of 15cm lift)
+        height_above_table = ycb_xyz[:, 2] - self.table_height
+        
+        # I set 3 levels of lift rewards:
+        # Initial lift (0-5cm): basic reward to get robot started
+        # Mid lift (5-10cm): increased reward to encourage lifting higher
+        # High lift (10-15cm): highest reward as robot is close to goal
+        
+        # Track if lifting has occurred (for printing)
+        if not hasattr(self, "lift_detected"):
+            self.lift_detected = torch.zeros(batch_size, dtype=torch.bool, device=self.device)
+            self.env_steps = torch.zeros(batch_size, device=self.device)
+        
+        self.env_steps += 1
+        newly_lifted = (height_above_table > 0.03) & (~self.lift_detected)
+        self.lift_detected = self.lift_detected | (height_above_table > 0.03)
+        
+        if newly_lifted[0]:
+            print(f"\n(ROBOT LIFTING OBJECT) Object lifted to {height_above_table[0].item():.4f}m at step {self.env_steps[0].item():.0f}!")
+        
+        # Basic lift reward level (linear with height)
+        base_lift_reward = torch.clamp(height_above_table * 5.0, min=0.0)
+        total_reward += base_lift_reward
+        
+        # Mid lift reward level (5cm)
+        mid_threshold = 0.05
+        mid_lift_bonus = torch.where(
+            height_above_table > mid_threshold,
+            torch.ones_like(height_above_table) * 1.0,  # small bonus reward
+            torch.zeros_like(height_above_table)
+        )
+        total_reward += mid_lift_bonus
+        
+        # High lift reward level (10cm)
+        high_threshold = 0.10
+        high_lift_bonus = torch.where(
+            height_above_table > high_threshold,
+            torch.ones_like(height_above_table) * 2.0,  # mid bonus reward
+            torch.zeros_like(height_above_table)
+        )
+        total_reward += high_lift_bonus
+        
+        # Success threshold (approaching 15cm)
+        goal_threshold = 0.145  # 14.5 cm
+        goal_approach_bonus = torch.where(
+            height_above_table > goal_threshold,
+            torch.ones_like(height_above_table) * 5.0, # large bonus reward
+            torch.zeros_like(height_above_table)
+        )
+        total_reward += goal_approach_bonus
+        
+        # 4. Penalty for left arm movement (added just in case, might not be needed tbh)
+        left_hand_positions = torch.stack([link.pose.p for link in self.left_hand_link], dim=1)
+        if not hasattr(self, "initial_left_hand_positions"):
+            self.initial_left_hand_positions = left_hand_positions.detach().clone()
+        
+        left_movement = torch.linalg.norm(
+            left_hand_positions - self.initial_left_hand_positions, dim=-1
+        ).mean(dim=-1)
+        total_reward -= left_movement * 5.0
+        
+        # Success and failure conditions
+        total_reward = torch.clamp(total_reward, -self.max_reward, self.max_reward)
         total_reward[info["success"]] = self.max_reward
         total_reward[info["fail"]] = -self.max_reward / 4
-
+        
         return total_reward
-
-    
-    # def compute_dense_reward(self, obs: Any, action: np.ndarray, info: Dict):
-    #     batch_size = self.ycb_object.pose.p.shape[0]
-    #     #print(f"Batch size: {batch_size}")
-    #     total_reward = torch.zeros(batch_size, device=self.device)
-
-    #     ycb_xyz = self.ycb_object.pose.p
-    #     #print(f"Shape of ycb_xyz: {ycb_xyz.shape}")
-
-    #     lift_reward = ycb_xyz[:, 2] - self.table_height - 0.07
-    #     #print(f"Shape of lift_reward: {lift_reward.shape}")
-    #     #print(f"Shape of total_reward: {total_reward.shape}")
-    #     total_reward += lift_reward * 15
-
-    #     # penalty for left arm movement
-    #     left_hand_positions = torch.stack([link.pose.p for link in self.left_hand_link], dim=1)
-    #     left_hand_movement = torch.linalg.norm(left_hand_positions - left_hand_positions.detach(), dim=-1).mean(dim=-1)
-    #     left_arm_penalty = -left_hand_movement * 50.0
-    #     total_reward += left_arm_penalty
-
-    #     # get finger tip pose
-    #     right_hand_tip_link_pose = torch.concat(
-    #         [link.pose.p.unsqueeze(1) for link in self.right_hand_tip_link], dim=1
-    #     ).to(self.device)
-
-    #     # finger spread reward to encourage finger movement
-    #     finger_positions = torch.stack([link.pose.p for link in self.right_hand_link], dim=1)
-    #     finger_spread = torch.std(finger_positions, dim=1).mean(dim=-1)
-    #     finger_spread_reward = torch.clamp(finger_spread * 5.0, 0, 1.0)
-    #     total_reward += finger_spread_reward
-
-    #     # calculate distance between finger tip and ycb object
-    #     right_hand_ycb_distance = torch.linalg.norm(
-    #         right_hand_tip_link_pose - ycb_xyz.unsqueeze(1), axis=-1
-    #     )
-
-    #     # calculate reward based on distance
-    #     #hand_close_reward = torch.clamp(0.05 / right_hand_ycb_distance, min=0, max=1.0).mean(dim=-1)
-    #     hand_close_reward = torch.exp(-2.0 * right_hand_ycb_distance).mean(dim=-1)
-    #     total_reward += hand_close_reward * 2.0
-
-    #     right_hand_tip_center = right_hand_tip_link_pose.mean(dim=1)
-    #     right_hand_tip_center_distance = torch.linalg.norm(
-    #         right_hand_tip_center - ycb_xyz, axis=-1
-    #     )
-
-    #     #center_close_reward = torch.clamp(0.025 / right_hand_tip_center_distance, min=0, max=1.0)
-    #     center_close_reward = torch.exp(-2.0 * right_hand_tip_center_distance)
-    #     total_reward += hand_close_reward + center_close_reward
-
-    #     # calculate height-based reward
-    #     height_diff = ycb_xyz[:, 2] - self.table_height
-    #     height_reward = torch.where(height_diff > 0, height_diff * 10.0, torch.zeros_like(height_diff))
-    #     total_reward += height_reward
-
-    #     total_reward = total_reward.clamp(-self.max_reward, self.max_reward)
-
-    #     total_reward[info["success"]] = self.max_reward
-    #     total_reward[info["fail"]] = -self.max_reward / 4
-    #     print(
-    #         "total: {:.2f}, lift: {:.2f}, center:{:.2f} hand_close: {:.2f}".format(
-    #             total_reward[0].item(),
-    #             lift_reward[0].item(),
-    #             center_close_reward[0].item(),
-    #             hand_close_reward[0].item(),
-    #         ),
-    #         end="\r",
-    #     )
-
-    #     return total_reward
 
     def compute_normalized_dense_reward(self, obs: Any, action: np.ndarray, info: Dict):
         self.max_reward = 5.0
